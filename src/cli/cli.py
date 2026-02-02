@@ -155,7 +155,7 @@ Examples:
         'explain',
         help='Explain what a shell command does'
     )
-    explain_parser.add_argument('command', help='Shell command to explain')
+    explain_parser.add_argument('command', nargs='?', help='Shell command to explain (or pipe from stdin)')
     explain_parser.set_defaults(func=handle_explain)
     
     # Edit command - Edit files with AI
@@ -189,7 +189,7 @@ Examples:
         'suggest',
         help='Generate shell command from natural language'
     )
-    suggest_parser.add_argument('prompt', help='Description of what you want to do')
+    suggest_parser.add_argument('prompt', nargs='?', help='Description of what you want to do (or pipe from stdin)')
     suggest_parser.set_defaults(func=handle_suggest)
     
     # New command - Create new project
@@ -425,7 +425,21 @@ def handle_commit(args):
 
 def handle_explain(args):
     """Handle shell command explanation with structured prompt"""
-    print(f"\n📖 Explaining command: {args.command}\n")
+    import sys
+    
+    # Get command from argument or stdin
+    if args.command:
+        command = args.command
+    elif not sys.stdin.isatty():
+        command = sys.stdin.read().strip()
+        if not command:
+            print("❌ Error: No command provided. Usage: devmind explain <command>")
+            return
+    else:
+        print("❌ Error: No command provided. Usage: devmind explain <command>")
+        return
+    
+    print(f"\n📖 Explaining command: {command}\n")
     
     try:
         from agents.agent_base import create_llm
@@ -435,11 +449,11 @@ def handle_explain(args):
         
         # Use structured prompt
         prompt_input = {
-            "command": args.command
+            "command": command
         }
         
         response = llm.invoke(SHELL_EXPLAINER_PROMPT.format(**prompt_input))
-        format_response(response, title=f"📖 Command Explanation: {args.command}")
+        format_response(response, title=f"📖 Command Explanation: {command}")
         
     except ImportError:
         print("⚠️  AI features not available. Install required dependencies.")
@@ -563,7 +577,21 @@ def handle_fix(args):
 
 def handle_suggest(args):
     """Handle shell command suggestion with structured prompt"""
-    print(f"\n💡 Suggesting command for: {args.prompt}\n")
+    import sys
+    
+    # Get prompt from argument or stdin
+    if args.prompt:
+        prompt = args.prompt
+    elif not sys.stdin.isatty():
+        prompt = sys.stdin.read().strip()
+        if not prompt:
+            print("❌ Error: No prompt provided. Usage: devmind suggest <description>")
+            return
+    else:
+        print("❌ Error: No prompt provided. Usage: devmind suggest <description>")
+        return
+    
+    print(f"\n💡 Suggesting command for: {prompt}\n")
     
     try:
         from agents.agent_base import create_llm
@@ -573,7 +601,7 @@ def handle_suggest(args):
         
         # Use structured prompt
         prompt_input = {
-            "task": args.prompt
+            "task": prompt
         }
         
         response = llm.invoke(SHELL_SUGGESTER_PROMPT.format(**prompt_input))
