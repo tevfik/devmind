@@ -159,9 +159,10 @@ Examples:
     # Explain command - Explain shell command
     explain_parser = subparsers.add_parser(
         'explain',
-        help='Explain what a shell command does'
+        help='Explain what a shell command does or analyze a file'
     )
     explain_parser.add_argument('command', nargs='?', help='Shell command to explain (or pipe from stdin)')
+    explain_parser.add_argument('-f', '--file', help='Explain a specific file (path to file)')
     explain_parser.set_defaults(func=handle_explain)
     
     # Edit command - Edit files with AI
@@ -373,33 +374,125 @@ def handle_analyze(args):
     print(f"   Analysis type: {args.type}\n")
     
     try:
-        # Try to import GitAnalyzer (the actual class that exists)
         from tools.git_analyzer import GitAnalyzer
+        from rich.table import Table
+        from rich.panel import Panel
+        import os
         
         analyzer = GitAnalyzer(args.path)
+        status = analyzer.get_status()
+        commits = analyzer.get_commits(50)
+        
+        if status.get('error'):
+            print(f"⚠️  {status['error']}")
+            return
+        
+        # Repository statistics
+        total_files = len([f for f in os.walk(args.path)]) if os.path.isdir(args.path) else 0
+        is_dirty = not status.get('is_clean', True)
         
         if args.type == 'overview':
-            status = analyzer.get_status()
-            commits = analyzer.get_commits()
-            print(f"Status: {status}")
-            print(f"Recent commits: {commits[:5]}")
+            # Create overview table
+            table = Table(title="Repository Overview", show_header=True, header_style="bold cyan")
+            table.add_column("Metric", style="white")
+            table.add_column("Value", style="green")
+            
+            table.add_row("Status", "🔴 Dirty" if is_dirty else "✅ Clean")
+            table.add_row("Commits", str(len(commits)))
+            table.add_row("Recent Activity", commits[0]['message'] if commits else "No commits")
+            
+            # Count file changes
+            changes = status.get('changes', '').split('\n')
+            modified = len([c for c in changes if c.strip().startswith('M ')])
+            added = len([c for c in changes if c.strip().startswith('?? ')])
+            deleted = len([c for c in changes if c.strip().startswith('D ')])
+            
+            table.add_row("Modified Files", str(modified))
+            table.add_row("New Files", str(added))
+            table.add_row("Deleted Files", str(deleted))
+            
+            console.print(table)
+            
+            # Recent commits
+            if commits:
+                print("\n📝 Recent Commits:")
+                for commit in commits[:5]:
+                    print(f"  • {commit['hash'][:7]} - {commit['message'][:60]}")
+                    
         elif args.type == 'structure':
-            # Get files in repository
-            files = analyzer.get_files() if hasattr(analyzer, 'get_files') else []
-            print(f"Repository structure loaded: {len(files)} files")
-        elif args.type == 'impact' and args.target:
-            # Analyze impact of changes
-            print(f"Analyzing impact on: {args.target}")
+            # Project structure analysis
+            lang_stats = {'Python': 0, 'Go': 0, 'C++': 0, 'JavaScript': 0, 'Other': 0}
+            
+            for root, dirs, files in os.walk(args.path):
+                # Skip hidden and cache directories
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules', 'venv']]
+                
+                for file in files:
+                    if file.endswith('.py'):
+                        lang_stats['Python'] += 1
+                    elif file.endswith('.go'):
+                        lang_stats['Go'] += 1
+                    elif file.endswith(('.cpp', '.cc', '.h', '.hpp')):
+                        lang_stats['C++'] += 1
+                    elif file.endswith(('.js', '.ts', '.jsx', '.tsx')):
+                        lang_stats['JavaScript'] += 1
+                    else:
+                        lang_stats['Other'] += 1
+            
+            table = Table(title="Project Structure", show_header=True, header_style="bold cyan")
+            table.add_column("Language", style="white")
+            table.add_column("Files", style="green")
+            
+            for lang, count in lang_stats.items():
+                if count > 0:
+                    table.add_row(lang, str(count))
+            
+            console.print(table)
+            
         elif args.type == 'detailed':
-            # Detailed analysis
-            status = analyzer.get_status()
-            commits = analyzer.get_commits(50)
-            print(f"Status: {status}")
-            print(f"Recent commits (50): {len(commits)} entries")
+            # Detailed analysis with insights
+            panel_text = f"""
+🔍 **Repository Analysis**
+
+**Status**: {'🔴 Has uncommitted changes' if is_dirty else '✅ Clean'}
+
+**Commit History**:
+  • Total commits: {len(commits)}
+  • Latest: {commits[0]['message'] if commits else 'No commits'}
+  • Last 5 commits:
+"""
+            for commit in commits[:5]:
+                panel_text += f"    - {commit['hash'][:7]} {commit['message'][:50]}\n"
+            
+            # File statistics
+            changes = status.get('changes', '').split('\n')
+            modified = len([c for c in changes if c.strip().startswith('M ')])
+            added = len([c for c in changes if c.strip().startswith('?? ')])
+            deleted = len([c for c in changes if c.strip().startswith('D ')])
+            
+            panel_text += f"""
+**Working Directory**:
+  • Modified files: {modified}
+  • New files: {added}
+  • Deleted files: {deleted}
+"""
+            
+            console.print(Panel(panel_text, title="Repository Details", border_style="cyan"))
+            
         else:
-            # Default overview
-            status = analyzer.get_status()
-            print(f"Repository status: {status}")
+            # Default: show basic info
+            table = Table(title="Repository Info", show_header=True, header_style="bold cyan")
+            table.add_column("Info", style="white")
+            table.add_column("Details", style="green")
+            
+            table.add_row("Location", args.path)
+            table.add_row("Status", "🔴 Dirty" if is_dirty else "✅ Clean")
+            table.add_row("Commits", str(len(commits)))
+            
+            changes = status.get('changes', '').split('\n')
+            table.add_row("Changes", str(len([c for c in changes if c.strip()])))
+            
+            console.print(table)
             
     except ImportError as ie:
         print(f"❌ Analysis failed: Module not found - {ie}")
@@ -452,9 +545,56 @@ def handle_commit(args):
 
 
 def handle_explain(args):
-    """Handle shell command explanation with structured prompt"""
+    """Handle shell command explanation or file analysis"""
     import sys
+    from pathlib import Path
     
+    # Check if file mode
+    if args.file:
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"❌ File not found: {args.file}")
+            return
+        
+        # Read file content
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+        except Exception as e:
+            print(f"❌ Error reading file: {e}")
+            return
+        
+        print(f"\n📖 Analyzing file: {args.file}\n")
+        
+        try:
+            from agents.agent_base import create_llm
+            
+            llm = create_llm()
+            
+            # Create prompt for file analysis
+            prompt = f"""Analyze the following file and explain:
+1. What this file does
+2. Key components or functions
+3. Important patterns or logic
+4. Any potential issues or improvements
+
+File: {args.file}
+```
+{content}
+```
+
+Provide a clear, concise analysis."""
+            
+            response = llm.invoke(prompt)
+            format_response(response, title=f"📖 File Analysis: {args.file}")
+            
+        except ImportError:
+            print("⚠️  AI features not available. Install required dependencies.")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+        return
+    
+    # Command explanation mode (existing logic)
     # Get command from argument or stdin
     if args.command:
         command = args.command
