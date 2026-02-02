@@ -568,24 +568,17 @@ def handle_explain(args):
         
         try:
             from agents.agent_base import create_llm
+            from utils.prompts import FILE_ANALYZER_PROMPT
             
             llm = create_llm()
             
-            # Create prompt for file analysis
-            prompt = f"""Analyze the following file and explain:
-1. What this file does
-2. Key components or functions
-3. Important patterns or logic
-4. Any potential issues or improvements
-
-File: {args.file}
-```
-{content}
-```
-
-Provide a clear, concise analysis."""
+            # Use file analyzer prompt template
+            prompt_input = {
+                "file_name": args.file,
+                "file_content": content
+            }
             
-            response = llm.invoke(prompt)
+            response = llm.invoke(FILE_ANALYZER_PROMPT.format(**prompt_input))
             format_response(response, title=f"📖 File Analysis: {args.file}")
             
         except ImportError:

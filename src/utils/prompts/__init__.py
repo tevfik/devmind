@@ -36,6 +36,7 @@ COMMIT_MESSAGE_PROMPT = load_prompt_template("commit_message.md")
 SHELL_EXPLAINER_PROMPT = load_prompt_template("shell_explainer.md")
 SHELL_SUGGESTER_PROMPT = load_prompt_template("shell_suggester.md")
 ERROR_FIXER_PROMPT = load_prompt_template("error_fixer.md")
+FILE_ANALYZER_PROMPT = load_prompt_template("file_analyzer.md")
 
 # Raw templates for mixing with system prompts
 PLANNER_USER_TEMPLATE = load_raw_prompt("planner_user.md")
