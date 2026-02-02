@@ -1,0 +1,71 @@
+# DevMind AI - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project Specific
+.env
+.devmind/
+.data/
+*.log
+
+# Docker data (databases, persistent storage)
+docker/data/
+docker/logs/
+
+# Temporary data
+.data/cache/
+.data/logs/
+.data/output/
+.data/chroma_db/
+.data/temp_repos/
+backups/
+*.db
+*.sqlite
+*.sqlite3
+
+# Git Clones (temporary repositories)
+temp_repos/
+repos/
+temp_repos/
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation builds
+docs/_build/

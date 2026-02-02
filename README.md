@@ -1,0 +1,161 @@
+# DevMind AI
+
+AI-powered CLI development assistant built on Ollama. Provides intelligent code analysis, command suggestions, error fixes, and git repository analysis through a command-line interface.
+
+## Features
+
+- **Chat**: Interactive conversation about code
+- **Commit Messages**: Generate professional commit messages
+- **Code Explanation**: Understand shell commands and code snippets
+- **Command Suggestions**: Get relevant commands based on intent
+- **Code Editing**: AI-assisted code modifications
+- **Error Analysis**: Debug errors from logs and stack traces
+- **Git Analysis**: Repository intelligence and insights
+- **Docker Support**: Container command assistance
+- **Beautiful Output**: Rich terminal formatting with syntax highlighting
+- **Local Processing**: Runs on Ollama, no cloud dependencies
+
+## Key Specifications
+
+- **44 Python modules** across 9,000+ lines of code
+- **12 CLI commands** with full test coverage (20/20 passing)
+- **Rich terminal UI** with markdown rendering and color support
+- **Modular architecture** with pluggable agents and tools
+
+## Installation
+
+### Requirements
+
+- Python 3.10 or higher
+- Ollama with `nemotron-3-nano:30b` model
+- Docker (optional, for container operations)
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/tevfik/devmind.git
+cd devmind
+
+# Install via pipx (recommended)
+pipx install -e .
+
+# Or use virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+```
+
+### Configuration
+
+```bash
+devmind setup
+```
+
+Creates `~/.devmind/config.json` with:
+- `OLLAMA_URL`: Ollama endpoint (default: http://localhost:11434)
+- `OLLAMA_MODEL`: LLM model (default: nemotron-3-nano:30b)
+- Docker configuration (optional)
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `devmind setup` | Initial configuration |
+| `devmind chat` | Interactive chat |
+| `devmind commit` | Generate commit messages |
+| `devmind explain` | Explain commands and code |
+| `devmind suggest` | Command suggestions |
+| `devmind edit` | Code editing assistance |
+| `devmind solve` | Problem solving |
+| `devmind fix` | Error analysis and solutions |
+| `devmind analyze` | Repository analysis |
+| `devmind docker` | Docker command assistance |
+| `devmind status` | System status check |
+
+## Testing
+
+```bash
+# Run all tests
+python3 test_cli.py
+python3 test_modules.py
+
+# Using make
+make test-all
+```
+
+**Result**: 20/20 tests passing ✅
+
+## Troubleshooting
+
+### Connection Issues
+
+**Error**: `Connection refused` or LLM not responding
+
+1. Verify Ollama is running: `curl http://localhost:11434/api/tags`
+2. Run setup again: `devmind setup`
+3. Check config file: `cat ~/.devmind/config.json`
+
+### Permission Errors
+
+**Error**: `Permission denied` (Docker operations)
+
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+sudo systemctl restart docker
+newgrp docker
+```
+
+### Import Errors
+
+**Error**: `ImportError: No module named...`
+
+1. Reinstall: `pip install -e .`
+2. Use virtual environment
+3. Verify Python 3.10+: `python3 --version`
+
+### Configuration Errors
+
+1. Run setup: `devmind setup`
+2. Validate JSON: `python3 -m json.tool ~/.devmind/config.json`
+3. Check file permissions
+
+### System Package Conflicts
+
+**Error**: `externally-managed-environment`
+
+```bash
+# Recommended: Use virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+
+# Or use pipx
+pipx install -e .
+```
+
+## Architecture
+
+```
+src/
+  cli/           # CLI interface and commands
+  config/        # Configuration management
+  agents/        # AI agent implementations
+  core/          # Core engine
+  memory/        # Memory and context management
+  tools/         # Git and system tools
+  utils/         # Utilities and prompts
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on bug reports, feature requests, and code contributions.
+
+## License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+---
+
+For issues and discussions, please use the [GitHub repository](https://github.com/tevfik/devmind).
