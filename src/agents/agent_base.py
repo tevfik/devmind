@@ -390,21 +390,34 @@ def retrieve_relevant_context(query: str, limit: int = 5) -> str:
     """
     Retrieve relevant context from the Memory Manager.
     Fetches both Code Elements and past Interactions.
+    Filters by current active session if available.
     """
     try:
         from .agent_memory import get_memory_manager
+        from core.session_manager import get_session_manager
+        
         memory = get_memory_manager()
+        session_mgr = get_session_manager()
+        active_session = session_mgr.get_active_session()
         
         # 1. Search for related code
         code_results = memory.get_related_code(query, limit=3)
         
-        # 2. Search for generic/task memories (optional, can be expanded)
+        # 2. Filter by active session if available
+        if active_session and code_results:
+            code_results = [
+                item for item in code_results 
+                if item.get('metadata', {}).get('session_id') == active_session
+            ]
+        
+        # 3. Search for generic/task memories (optional, can be expanded)
         # generic_results = memory.search_memories(query, limit=2)
         
         if not code_results:
             return ""
-            
-        context_str = "\n\n=== 🧠 RECALLED MEMORY ===\n"
+        
+        session_info = f" [Session: {active_session}]" if active_session else ""
+        context_str = f"\n\n=== 🧠 RECALLED MEMORY{session_info} ===\n"
         for item in code_results:
             context_str += f"- Found relevant code in {item['metadata'].get('file_path', 'unknown')}:\n"
             content_preview = item['content'][:500] + "..." if len(item['content']) > 500 else item['content']

@@ -114,6 +114,42 @@ Examples:
     docker_subparsers.add_parser('restart', help='Restart services')
     docker_parser.set_defaults(func=handle_docker)
     
+    # Session command - Manage sessions
+    session_parser = subparsers.add_parser(
+        'session',
+        help='Manage DevMind sessions with tags'
+    )
+    session_subparsers = session_parser.add_subparsers(
+        dest='session_action',
+        help='Session action'
+    )
+    
+    # session new [--name NAME] [--tag TAG [TAG ...]]
+    session_new = session_subparsers.add_parser('new', help='Create new session')
+    session_new.add_argument('--name', help='Session name')
+    session_new.add_argument('--tag', nargs='*', help='Tags for session')
+    
+    # session list
+    session_subparsers.add_parser('list', help='List all sessions')
+    
+    # session current
+    session_subparsers.add_parser('current', help='Show active session')
+    
+    # session set <session_id>
+    session_set = session_subparsers.add_parser('set', help='Switch to session')
+    session_set.add_argument('session_id', help='Session ID to switch to')
+    
+    # session tag <session_id> <tag>
+    session_tag = session_subparsers.add_parser('tag', help='Add tag to session')
+    session_tag.add_argument('session_id', help='Session ID')
+    session_tag.add_argument('tag', help='Tag to add')
+    
+    # session delete <session_id>
+    session_delete = session_subparsers.add_parser('delete', help='Delete session')
+    session_delete.add_argument('session_id', help='Session ID to delete')
+    
+    session_parser.set_defaults(func=handle_session)
+    
     # Status command
     status_parser = subparsers.add_parser(
         'status',
@@ -307,6 +343,106 @@ def handle_docker(args):
             print(f"\n{msg}")
             if success:
                 manager.print_status()
+
+
+def handle_session(args):
+    """Handle session management commands"""
+    from core.session_manager import get_session_manager
+    from rich.table import Table
+    
+    session_mgr = get_session_manager()
+    
+    if not args.session_action:
+        print("❌ Error: Please specify a session action")
+        print("   Try: devmind session --help")
+        return
+    
+    # New session
+    if args.session_action == "new":
+        tags = args.tag if args.tag else []
+        session_id = session_mgr.create_session(name=args.name, tags=tags)
+        print(f"\n✅ Created session: {session_id}")
+        if args.name:
+            print(f"   Name: {args.name}")
+        if tags:
+            print(f"   Tags: {', '.join(tags)}")
+        print(f"   Active: ✓\n")
+    
+    # List sessions
+    elif args.session_action == "list":
+        sessions = session_mgr.list_sessions()
+        active = session_mgr.get_active_session()
+        
+        if not sessions:
+            print("\n❌ No sessions found")
+            print("   Create one: devmind session new\n")
+            return
+        
+        table = Table(title="DevMind Sessions", show_header=True, header_style="bold cyan")
+        table.add_column("ID", style="green")
+        table.add_column("Name", style="white")
+        table.add_column("Tags", style="yellow")
+        table.add_column("Created", style="dim")
+        table.add_column("Active", style="bold")
+        
+        for session in sessions:
+            is_active = "✓" if session["id"] == active else ""
+            tags_str = ", ".join(session.get("tags", []))
+            created = session["created_at"][:10]
+            table.add_row(
+                session["id"],
+                session["name"],
+                tags_str or "-",
+                created,
+                is_active
+            )
+        
+        console.print(table)
+        print()
+    
+    # Show current session
+    elif args.session_action == "current":
+        active = session_mgr.get_active_session()
+        if not active:
+            print("\n❌ No active session\n")
+            return
+        
+        session = session_mgr.get_session(active)
+        if session:
+            print(f"\n🎯 Active Session:")
+            print(f"   ID: {session['id']}")
+            print(f"   Name: {session['name']}")
+            print(f"   Tags: {', '.join(session.get('tags', [])) or '-'}")
+            print(f"   Created: {session['created_at'][:10]}")
+            print(f"   Last used: {session['last_used'][:10]}\n")
+    
+    # Switch session
+    elif args.session_action == "set":
+        if session_mgr.set_active_session(args.session_id):
+            session = session_mgr.get_session(args.session_id)
+            print(f"\n✅ Switched to session: {session['name']}")
+            print(f"   ID: {args.session_id}\n")
+        else:
+            print(f"\n❌ Session not found: {args.session_id}\n")
+    
+    # Add tag
+    elif args.session_action == "tag":
+        if session_mgr.add_tag(args.session_id, args.tag):
+            session = session_mgr.get_session(args.session_id)
+            print(f"\n✅ Added tag '{args.tag}' to session: {session['name']}")
+            print(f"   Tags: {', '.join(session.get('tags', []))}\n")
+        else:
+            print(f"\n❌ Session not found: {args.session_id}\n")
+    
+    # Delete session
+    elif args.session_action == "delete":
+        session = session_mgr.get_session(args.session_id)
+        if not session:
+            print(f"\n❌ Session not found: {args.session_id}\n")
+            return
+        
+        session_mgr.delete_session(args.session_id)
+        print(f"\n✅ Deleted session: {session['name']}\n")
 
 
 def handle_status(args):
