@@ -139,19 +139,23 @@ class RAGService:
             logger.info(f"Query Intent Response: {intent_response[:100]}...")
             
             # Extract intent label from response (look for CHAT, STRUCTURE, SEMANTIC, or HYBRID)
-            # Check in priority order - look for exact label matches first
+            # Look for markdown bold format **LABEL** or "Label:" pattern
             intent = "HYBRID"  # default
             intent_upper = intent_response.upper()
             
-            # Look for the label that appears first in the response
-            if "CHAT:" in intent_upper or intent_upper.startswith("CHAT"):
-                intent = "CHAT"
-            elif "SEMANTIC:" in intent_upper or "SEMANTIC\n" in intent_upper or intent_upper.startswith("SEMANTIC"):
-                intent = "SEMANTIC"
-            elif "STRUCTURE:" in intent_upper or "STRUCTURE\n" in intent_upper or intent_upper.startswith("STRUCTURE"):
-                intent = "STRUCTURE"
-            elif "HYBRID:" in intent_upper or intent_upper.startswith("HYBRID"):
-                intent = "HYBRID"
+            # Priority: Check for bold markdown first (**LABEL**)
+            import re
+            bold_match = re.search(r'\*\*(CHAT|STRUCTURE|SEMANTIC|HYBRID)\*\*', intent_upper)
+            if bold_match:
+                intent = bold_match.group(1)
+            # Then check for "LABEL:" pattern at line start
+            elif re.search(r'^\s*(CHAT|STRUCTURE|SEMANTIC|HYBRID)\s*:', intent_upper, re.MULTILINE):
+                match = re.search(r'^\s*(CHAT|STRUCTURE|SEMANTIC|HYBRID)\s*:', intent_upper, re.MULTILINE)
+                intent = match.group(1)
+            # Fallback: Check line that starts with label
+            elif re.search(r'^(CHAT|STRUCTURE|SEMANTIC|HYBRID)\s*$', intent_upper, re.MULTILINE):
+                match = re.search(r'^(CHAT|STRUCTURE|SEMANTIC|HYBRID)\s*$', intent_upper, re.MULTILINE)
+                intent = match.group(1)
             
             logger.info(f"Parsed Intent: {intent}")
         except Exception as e:
