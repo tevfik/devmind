@@ -68,6 +68,8 @@ Examples:
   devmind new api --type fastapi  Create FastAPI project
   devmind docker status      Check Docker services
   devmind chat               Start interactive AI chat
+  devmind learn              Deep learn current repository (AST + embeddings)
+  devmind learn /path/repo   Learn a specific repository
   devmind commit             Generate commit message
   devmind explain "command"  Explain a shell command
   devmind --version          Show version
@@ -181,6 +183,16 @@ Examples:
     analyze_parser.add_argument('--target', help='Target function/class for impact analysis')
     analyze_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
     analyze_parser.set_defaults(func=handle_analyze)
+    
+    # Learn command - Deep repository learning (Neo4j + Qdrant)
+    learn_parser = subparsers.add_parser(
+        'learn',
+        help='Deep learn a repository (AST, call graphs, embeddings)'
+    )
+    learn_parser.add_argument('path', nargs='?', default='.', help='Path to repository (default: current dir)')
+    learn_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
+    learn_parser.add_argument('--session-id', help='Custom session ID (default: auto-generated)')
+    learn_parser.set_defaults(func=handle_learn)
 
     # Simulate command - Helper for impact analysis
     simulate_parser = subparsers.add_parser(
@@ -722,6 +734,121 @@ def handle_analyze(args):
         print("   Try: pip install -e . --upgrade")
     except Exception as e:
         print(f"❌ Analysis failed: {e}")
+
+
+def handle_learn(args):
+    """Handle deep repository learning"""
+    from rich.console import Console
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+    from tools.code_analyzer.analyzer import CodeAnalyzer
+    from pathlib import Path
+    import time
+    import uuid
+    import os
+    
+    console = Console()
+    repo_path = Path(args.path).resolve()
+    
+    if not repo_path.exists():
+        console.print(f"[bold red]❌ Error:[/bold red] Repository path does not exist: {repo_path}")
+        return
+    
+    console.print(f"\n[bold cyan]🧠 Deep Learning Repository:[/bold cyan] {repo_path.name}")
+    console.print(f"[dim]Location: {repo_path}[/dim]\n")
+    
+    # Session ID
+    session_id = args.session_id or f"learn_{uuid.uuid4().hex[:8]}"
+    console.print(f"[dim]Session ID: {session_id}[/dim]")
+    
+    # Neo4j Config
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+    
+    # Qdrant Config
+    qdrant_host = os.getenv("QDRANT_HOST", "localhost")
+    qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+    
+    console.print(f"[dim]Neo4j: {neo4j_uri}[/dim]")
+    console.print(f"[dim]Qdrant: {qdrant_host}:{qdrant_port}[/dim]\n")
+    
+    try:
+        analyzer = CodeAnalyzer(session_id, repo_path)
+        
+        # Connect to databases
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task("Connecting to databases...", total=None)
+            
+            try:
+                analyzer.connect_db(neo4j_uri, (neo4j_user, neo4j_password))
+                progress.update(task, description="✅ Connected to Neo4j")
+            except Exception as e:
+                progress.update(task, description=f"⚠️  Neo4j connection failed: {e}")
+                console.print(f"[yellow]   Continuing without graph database[/yellow]")
+        
+        # Analyze repository
+        console.print(f"\n[bold]📊 Analyzing codebase...[/bold]")
+        start_time = time.time()
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task(
+                "Processing files...",
+                total=None
+            )
+            
+            # Run analysis
+            analyzer.analyze_repository(incremental=args.incremental)
+            
+            duration = time.time() - start_time
+            progress.update(task, description=f"✅ Analysis complete ({duration:.2f}s)")
+        
+        # Display results
+        console.print(f"\n[bold green]✅ Repository Learning Complete![/bold green]")
+        console.print(f"   Duration: {duration:.2f}s")
+        console.print(f"   Session: {session_id}\n")
+        
+        # Show statistics
+        if analyzer.neo4j_adapter:
+            console.print("[bold]📈 Graph Statistics:[/bold]")
+            
+            # Query node counts
+            with analyzer.neo4j_adapter.driver.session() as session:
+                result = session.run("MATCH (n) RETURN labels(n)[0] as type, count(n) as count")
+                for record in result:
+                    node_type = record["type"] or "Unknown"
+                    count = record["count"]
+                    console.print(f"   • {node_type}: {count}")
+            
+            # Check for circular dependencies
+            cycles = analyzer.neo4j_adapter.detect_circular_dependencies()
+            if cycles:
+                console.print(f"\n[bold yellow]⚠️  Found {len(cycles)} Circular Dependencies[/bold yellow]")
+                for cycle in cycles[:5]:  # Show first 5
+                    names = [uid.split("::")[-1] for uid in cycle]
+                    console.print(f"   🔄 {' → '.join(names)}")
+                if len(cycles) > 5:
+                    console.print(f"   ... and {len(cycles) - 5} more")
+        
+        # Cleanup
+        analyzer.close()
+        
+        console.print(f"\n[dim]💡 You can now query this repository with:[/dim]")
+        console.print(f"[dim]   • devmind chat (for semantic queries)[/dim]")
+        console.print(f"[dim]   • devmind simulate <file> <function> (for impact analysis)[/dim]")
+        
+    except Exception as e:
+        console.print(f"\n[bold red]❌ Learning Failed:[/bold red] {str(e)}")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
 def handle_simulate(args):
