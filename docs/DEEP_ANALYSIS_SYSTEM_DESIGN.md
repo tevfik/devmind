@@ -595,7 +595,7 @@ tests/
 - [x] **Incremental Learning Engine**
     - [x] Add `devmind analyze --incremental` flag.
     - [x] Logic: Get `git diff` -> identify changed files -> re-parse ONLY those.
-    - [ ] **[TEST]** `tests/integration/test_incremental_learning.py`.
+    - [x] **[TEST]** `tests/integration/test_incremental_learning.py`.
 
 - [x] **Impact Analysis & Simulation**
     - [x] Implement `ImpactAnalyzer` algorithm.
