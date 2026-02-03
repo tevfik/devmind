@@ -78,7 +78,7 @@ class CodeAnalyzer:
         ext = file_path.suffix.lower()
         if ext in ['.py']:
             return self.parsers.get('python')
-        elif ext in ['.cpp', '.cxx', '.cc', '.hpp', '.hxx']:
+        elif ext in ['.cpp', '.cxx', '.cc', '.hpp', '.hxx', '.ino']:
             return self.parsers.get('cpp')
         elif ext in ['.c', '.h']:
             return self.parsers.get('c') or self.parsers.get('cpp')
@@ -362,7 +362,7 @@ class CodeAnalyzer:
             '.html', '.htm', '.css', '.scss', '.sass', '.less', '.styl',
             '.json', '.json5', '.xml', '.yaml', '.yml', '.toml', '.graphql', '.gql',
             # C/C++
-            '.c', '.cpp', '.cxx', '.cc', '.cp', '.h', '.hpp', '.hxx', '.hh', '.inl', '.m', '.mm',
+            '.c', '.cpp', '.cxx', '.cc', '.cp', '.h', '.hpp', '.hxx', '.hh', '.inl', '.m', '.mm', '.ino',
             # JVM
             '.java', '.kt', '.kts', '.scala', '.groovy', '.clj', '.cljs',
             # .NET
