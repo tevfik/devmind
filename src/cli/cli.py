@@ -230,7 +230,7 @@ Examples:
     )
     learn_parser.add_argument('path', nargs='?', default='.', help='Path to repository (default: current dir)')
     learn_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
-    learn_parser.add_argument('--session-id', help='Custom session ID (default: auto-generated)')
+    learn_parser.add_argument('--project-id', help='Custom project ID (default: auto-generated)')
     learn_parser.set_defaults(func=handle_learn)
 
     # Simulate command - Helper for impact analysis
@@ -547,12 +547,6 @@ def handle_project(args):
     # Delete project
     elif args.project_action == "delete":
         handle_project_delete(args)
-        if not session:
-            print(f"\n❌ Session not found: {args.session_id}\n")
-            return
-        
-        session_mgr.delete_session(args.session_id)
-        print(f"\n✅ Deleted session: {session['name']}\n")
 
 
 def handle_status(args):
@@ -847,9 +841,10 @@ def handle_learn(args):
     console.print(f"\n[bold cyan]🧠 Deep Learning Repository:[/bold cyan] {repo_path.name}")
     console.print(f"[dim]Location: {repo_path}[/dim]\n")
     
-    # Session ID
-    session_id = args.session_id or f"learn_{uuid.uuid4().hex[:8]}"
-    console.print(f"[dim]Session ID: {session_id}[/dim]")
+    # Project ID (formerly session_id in backend)
+    # We use project_id for persistent storage of learned code
+    project_id = args.project_id or f"proj_{uuid.uuid4().hex[:8]}"
+    console.print(f"[dim]Project ID: {project_id}[/dim]")
     
     # Neo4j Config
     neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -864,7 +859,8 @@ def handle_learn(args):
     console.print(f"[dim]Qdrant: {qdrant_host}:{qdrant_port}[/dim]\n")
     
     try:
-        analyzer = CodeAnalyzer(session_id, repo_path)
+        # Pass project_id as the session_id for CodeAnalyzer to store data under this ID
+        analyzer = CodeAnalyzer(project_id, repo_path)
         
         # Connect to databases
         with Progress(
@@ -908,7 +904,7 @@ def handle_learn(args):
         # Display results
         console.print(f"\n[bold green]✅ Repository Learning Complete![/bold green]")
         console.print(f"   Duration: {duration:.2f}s")
-        console.print(f"   Session: {session_id}\n")
+        console.print(f"   Project: {project_id}\n")
         
         # Show statistics
         if analyzer.neo4j_adapter:
@@ -931,22 +927,22 @@ def handle_learn(args):
             # Show session-level statistics if multiple repos in session
             with analyzer.neo4j_adapter.driver.session() as db_session:
                 session_repos = db_session.run("""
-                    MATCH (n {session_id: $session_id})
+                    MATCH (n {session_id: $project_id})
                     RETURN DISTINCT n.repo_id as repo_id
-                """, {"session_id": session_id}).values()
+                """, {"project_id": project_id}).values()
                 
                 if len(session_repos) > 1:
-                    console.print(f"\n[bold cyan]📦 Session '{session_id}' includes {len(session_repos)} repositories:[/bold cyan]")
+                    console.print(f"\n[bold cyan]📦 Project '{project_id}' includes {len(session_repos)} repositories:[/bold cyan]")
                     for repo in session_repos:
                         if repo[0]:
                             console.print(f"   • {repo[0]}")
                     
                     # Total session stats
                     result = db_session.run("""
-                        MATCH (n {session_id: $session_id})
+                        MATCH (n {session_id: $project_id})
                         RETURN labels(n)[0] as type, count(n) as count
                         ORDER BY type
-                    """, {"session_id": session_id})
+                    """, {"project_id": project_id})
                     console.print(f"\n[dim]   Total across session:[/dim]")
                     for record in result:
                         node_type = record["type"] or "Unknown"
@@ -1834,7 +1830,7 @@ def handle_project_list(args):
             
             if not projects:
                 console.print("[yellow]No projects found. Create one with:[/yellow]")
-                console.print("[dim]  devmind learn <path> --session-id=<name>[/dim]\n")
+                console.print("[dim]  devmind learn <path> --project-id=<name>[/dim]\n")
                 return
             
             table = Table(show_header=True, header_style="bold magenta")
@@ -2009,9 +2005,30 @@ def handle_project_delete(args):
         
         adapter.close()
         
-        # Note: Qdrant embeddings deletion would need to be added here
-        console.print(f"\n[dim]💡 Note: Qdrant embeddings for this project remain. ")
-        console.print(f"   Use Qdrant console to delete if needed.[/dim]\n")
+        # Delete embeddings
+        try:
+            from config.config import MemoryConfig
+            mem_config = MemoryConfig()
+            
+            if mem_config.memory_type == "leann":
+                from tools.code_analyzer.leann_adapter import LeannAdapter
+                # LeannAdapter uses session_id to determine storage path
+                leann_adapter = LeannAdapter(session_id=project_id)
+                leann_adapter.delete_collection()
+                console.print(f"[dim]   Removed Leann index for project[/dim]\n")
+            elif mem_config.memory_type == "chroma":
+                from tools.code_analyzer.chroma_adapter import ChromaAdapter
+                chroma_adapter = ChromaAdapter()
+                chroma_adapter.delete_by_filter(filter_key="session_id", filter_value=project_id)
+                console.print(f"[dim]   Removed embeddings from ChromaDB[/dim]\n")
+            else:
+                from tools.code_analyzer.qdrant_adapter import QdrantAdapter
+                qdrant_adapter = QdrantAdapter()
+                qdrant_adapter.delete_by_filter(filter_key="session_id", filter_value=project_id)
+                console.print(f"[dim]   Removed embeddings from Qdrant[/dim]\n")
+                
+        except Exception as e:
+            console.print(f"\n[dim]⚠️  Could not delete embeddings: {e}[/dim]\n")
         
     except Exception as e:
         console.print(f"\n[bold red]❌ Error:[/bold red] {str(e)}")

@@ -150,15 +150,33 @@ class DevMindSetupWizard:
 
         return config
 
-    def setup_qdrant(self) -> Dict:
-        """Setup Qdrant (vector database) configuration"""
-        self.print_section("Qdrant Configuration (Vector Database)")
-        print("Qdrant stores vector embeddings for semantic search.")
+    def setup_memory(self) -> Dict:
+        """Setup Memory (Vector Database) configuration"""
+        self.print_section("Memory Configuration (Vector Database)")
+        print("DevMind uses vector database for semantic memory.")
+        print("Options:")
+        print("  1. Qdrant (Standard): Robust, feature-rich vector database (Requires Docker)")
+        print("  2. LEANN (Experimental): Lightweight, local, Python-native (No Docker required)")
+        print("  3. ChromaDB (Local): Persistent local vector database (No Docker required)\n")
+
+        mem_choice = self.input_with_default("Select Memory Type (1, 2 or 3)", "1")
+        
+        if mem_choice == "2":
+            print("\n✅ Selected LEANN (Local Efficient ANN)")
+            return {"MEMORY_TYPE": "leann"}
+        elif mem_choice == "3":
+            print("\n✅ Selected ChromaDB (Local Persistent Storage)")
+            return {"MEMORY_TYPE": "chroma"}
+        
+        # Qdrant Setup
+        print("\nConfiguring Qdrant...")
         print("Options:")
         print("  1. Local (default): Uses local Qdrant server in Docker")
         print("  2. Cloud: Uses Qdrant Cloud service\n")
 
         choice = self.input_with_default("Choice (1 or 2)", "1")
+        
+        base_config = {"MEMORY_TYPE": "qdrant"}
 
         if choice == "2":
             url = self.input_with_default(
@@ -166,14 +184,16 @@ class DevMindSetupWizard:
                 "https://xxx-x-y-z-xxxxx.eu-central1-0.qdb.cloud",
             )
             api_key = self.input_with_default("Qdrant API Key (keep it secret!)")
-            return {
+            base_config.update({
                 "QDRANT_URL": url,
                 "QDRANT_API_KEY": api_key,
                 "QDRANT_MODE": "cloud",
-            }
+            })
         else:
             url = self.input_with_default("Qdrant local server URL", "http://localhost:6333")
-            return {"QDRANT_URL": url, "QDRANT_MODE": "local"}
+            base_config.update({"QDRANT_URL": url, "QDRANT_MODE": "local"})
+            
+        return base_config
 
     def setup_neo4j(self) -> Dict:
         """Setup Neo4j (graph database) configuration"""
@@ -294,7 +314,7 @@ class DevMindSetupWizard:
 
         categories = {
             "🔧 Ollama": ["OLLAMA_URL", "OLLAMA_MODEL"],
-            "📦 Qdrant": ["QDRANT_URL", "QDRANT_MODE", "QDRANT_API_KEY"],
+            "🧠 Memory": ["MEMORY_TYPE", "QDRANT_URL", "QDRANT_MODE", "LEANN_BASE_PATH"],
             "📊 Neo4j": ["NEO4J_URI", "NEO4J_USER"],
             "💾 ChromaDB": ["CHROMA_PERSIST_DIR"],
         }
@@ -349,7 +369,7 @@ class DevMindSetupWizard:
         # Run setup sections
         config = {}
         config.update(self.setup_ollama())
-        config.update(self.setup_qdrant())
+        config.update(self.setup_memory())
         config.update(self.setup_neo4j())
         config.update(self.setup_chromadb())
         config.update(self.setup_optional_services())

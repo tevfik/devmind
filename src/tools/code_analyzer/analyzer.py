@@ -9,14 +9,17 @@ import ast
 from rich.progress import Progress
 
 from .ast_parser import ASTParser
+from .parsers.tree_sitter_parser import TreeSitterParser
 from .neo4j_adapter import Neo4jAdapter
 from .cache_manager import CachingManager
 from .models import FileAnalysis
 from .import_resolver import ImportResolver
 from .call_graph import CallGraphBuilder
 from .embeddings import CodeEmbedder
-from .qdrant_adapter import QdrantAdapter
 from .chunker import CodeChunker
+from .qdrant_adapter import QdrantAdapter
+from .leann_adapter import LeannAdapter
+from .chroma_adapter import ChromaAdapter
 from tools.git_analyzer import GitAnalyzer
 from tools.rag.rag_service import RAGService
 from core.analysis_session import AnalysisSession
@@ -36,14 +39,21 @@ class CodeAnalyzer:
         # Components
         self.session = AnalysisSession(session_id)
         self.cache = CachingManager()
-        self.parser = ASTParser()
+        self.parser = ASTParser() # Keep as default python parser
         self.import_resolver = ImportResolver(self.repo_path)
         self.call_graph_builder = CallGraphBuilder()
         self.git_analyzer = GitAnalyzer(str(self.repo_path))
+        self.memory_config = cfg.MemoryConfig()
+        
+        # Parsers
+        self.parsers = {}
+        self._init_parsers()
         
         # Semantic Components (Lazy load)
         self.code_embedder = None
         self.qdrant_adapter = None
+        self.chroma_adapter = None
+        self.leann_adapter = None
         self.chunker = None
         
         # RAG Component
@@ -52,16 +62,57 @@ class CodeAnalyzer:
         # Initialize Neo4j (Lazy load or config based)
         self.neo4j_adapter = None  
 
+    def _init_parsers(self):
+        """Initialize language parsers"""
+        self.parsers['python'] = self.parser
+        
+        # Initialize Tree-sitter parsers
+        for lang in ['cpp', 'c', 'java', 'go', 'javascript', 'typescript']:
+            try:
+                self.parsers[lang] = TreeSitterParser(lang)
+            except Exception as e:
+                logger.debug(f"Parser for {lang} not available: {e}")
+
+    def get_parser(self, file_path: Path):
+        """Get appropriate parser for file"""
+        ext = file_path.suffix.lower()
+        if ext in ['.py']:
+            return self.parsers.get('python')
+        elif ext in ['.cpp', '.cxx', '.cc', '.hpp', '.hxx']:
+            return self.parsers.get('cpp')
+        elif ext in ['.c', '.h']:
+            return self.parsers.get('c') or self.parsers.get('cpp')
+        elif ext in ['.java']:
+            return self.parsers.get('java')
+        elif ext in ['.go']:
+            return self.parsers.get('go')
+        elif ext in ['.js', '.jsx']:
+            return self.parsers.get('javascript')
+        elif ext in ['.ts', '.tsx']:
+             return self.parsers.get('typescript')
+        return None
+
     def connect_db(self, uri: str, auth: tuple):
+
         self.neo4j_adapter = Neo4jAdapter(uri, auth)
         self.neo4j_adapter.init_schema()
     
     def init_semantic(self):
-        """Initialize semantic analysis components (Embeddings + Qdrant)"""
-        if not self.code_embedder:
-            self.code_embedder = CodeEmbedder()
-        if not self.qdrant_adapter:
-            self.qdrant_adapter = QdrantAdapter()
+        """Initialize semantic analysis components (Embeddings + Vector DB)"""
+        if self.memory_config.memory_type == "leann":
+            if not self.leann_adapter:
+                self.leann_adapter = LeannAdapter(self.session_id)
+        elif self.memory_config.memory_type == "chroma":
+            if not self.code_embedder:
+                self.code_embedder = CodeEmbedder()
+            if not self.chroma_adapter:
+                self.chroma_adapter = ChromaAdapter()
+        else:
+            if not self.code_embedder:
+                self.code_embedder = CodeEmbedder()
+            if not self.qdrant_adapter:
+                self.qdrant_adapter = QdrantAdapter()
+                
         if not self.chunker:
             self.chunker = CodeChunker()
             
@@ -89,9 +140,28 @@ class CodeAnalyzer:
         """
         self.init_semantic()
         try:
-            vector = self.code_embedder.embed_query(source_code)
-            results = self.qdrant_adapter.search(vector, limit=limit, score_threshold=threshold)
-            return results
+            if self.memory_config.memory_type == "leann":
+                # Leann uses text query
+                return self.leann_adapter.search(
+                    source_code, 
+                    limit=limit, 
+                    score_threshold=threshold,
+                    # We might pass default filters if needed, but session is handled by adapter path
+                    query_filter={"session_id": self.session_id} 
+                )
+            elif self.memory_config.memory_type == "chroma":
+                vector = self.code_embedder.embed_query(source_code)
+                # Chroma uses 'where' filter
+                return self.chroma_adapter.search(
+                    vector, 
+                    limit=limit, 
+                    score_threshold=threshold,
+                    query_filter={"session_id": self.session_id}
+                )
+            else:
+                vector = self.code_embedder.embed_query(source_code)
+                results = self.qdrant_adapter.search(vector, limit=limit, score_threshold=threshold)
+                return results
         except Exception as e:
             logger.error(f"Error finding similar code: {e}")
             return []
@@ -141,24 +211,58 @@ class CodeAnalyzer:
                     
                     if not analysis:
                         # 2. Parse (Cache Miss)
-                        analysis = self.parser.parse_file(file_path, self.repo_path)
+                        parser = self.get_parser(file_path)
                         
-                        # Phase 2: Enrich with Calls and Imports
-                        if analysis:
-                            # Parse AST for calls
-                            with open(file_path, "r", encoding="utf-8") as f:
-                                content = f.read()
-                                tree = ast.parse(content, filename=str(file_path))
-                                analysis.calls = self.call_graph_builder.build(tree)
-                            
-                            # Resolve Imports
-                            for imp in analysis.imports:
-                                resolved = self.import_resolver.resolve_import(imp, file_path)
-                                if resolved:
-                                    imp_name = imp.module if imp.module else (imp.names[0] if imp.names else "")
-                                    if imp_name:
-                                        analysis.resolved_imports[imp_name] = str(resolved)
+                        if parser:
+                            # Structural Analysis via Parser (Python, C++, etc.)
+                            try:
+                                with open(file_path, "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                
+                                analysis = parser.parse(content, file_path, self.repo_path)
+                                
+                                # Python Specific Enrichment (Call Graph & Resolve Imports)
+                                # TODO: Move this logic into ASTParser or LanguageSpecific Enrichers
+                                if analysis and isinstance(parser, ASTParser):
+                                    try:
+                                        # Parse AST for calls
+                                        tree = ast.parse(content, filename=str(file_path))
+                                        analysis.calls = self.call_graph_builder.build(tree)
+                                        
+                                        # Resolve Imports
+                                        for imp in analysis.imports:
+                                            resolved = self.import_resolver.resolve_import(imp, file_path)
+                                            if resolved:
+                                                imp_name = imp.module if imp.module else (imp.names[0] if imp.names else "")
+                                                if imp_name:
+                                                    analysis.resolved_imports[imp_name] = str(resolved)
+                                    except Exception as e:
+                                        logger.warning(f"AST enrichment failed for {file_path}: {e}")
+                                        
+                            except Exception as e:
+                                logger.warning(f"Structural parsing failed for {file_path}: {e}")
+                                analysis = None
 
+                        if not analysis:
+                            # Fallback: Generic text parsing
+                            try:
+                                with open(file_path, "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                
+                                rel_path = file_path.relative_to(self.repo_path).as_posix()
+                                analysis = FileAnalysis(
+                                    file_path=rel_path,
+                                    language=file_path.suffix.lstrip('.') or "text",
+                                    loc=len(content.splitlines())
+                                )
+                            except UnicodeDecodeError:
+                                # logger.warning(f"Skipping binary/encoding error: {file_path}")
+                                continue
+                            except Exception as e:
+                                logger.warning(f"Generic parse failed for {file_path}: {e}")
+                                continue
+
+                        if analysis:
                             self.cache.save_analysis(file_path, analysis)
                     
                     # 3. Store in Neo4j (Nodes + Relationships)
@@ -236,20 +340,59 @@ class CodeAnalyzer:
                 items_to_embed.append(payload)
             
             if items_to_embed:
-                # Generate embeddings (will use 'content' key by default in our embedder logic)
-                embedded_items = self.code_embedder.embed_code_batch(items_to_embed)
-                # Store in Qdrant
-                self.qdrant_adapter.store_embeddings(embedded_items)
+                if self.memory_config.memory_type == "leann":
+                    self.leann_adapter.store_embeddings(items_to_embed)
+                else:
+                    # Generate embeddings (will use 'content' key by default in our embedder logic)
+                    embedded_items = self.code_embedder.embed_code_batch(items_to_embed)
+                    # Store in Qdrant
+                    self.qdrant_adapter.store_embeddings(embedded_items)
                 
         except Exception as e:
             logger.error(f"Semantic analysis failed for {file_path}: {e}")
 
     def _find_files(self) -> Generator[Path, None, None]:
-        """Yield python files in repo, respecting gitignore (simple version)"""
-        # TODO: Implement proper gitignore parsing
-        # For now, simple walk + exclude hidden/.git
-        for p in self.repo_path.rglob("*.py"):
-            parts = p.parts
-            if any(part.startswith(".") for part in parts) or "venv" in parts or "__pycache__" in parts:
+        """Yield files in repo, respecting gitignore (simple filtering)"""
+        # Supported extensions for text/code analysis
+        SUPPORTED_EXTENSIONS = {
+            # Python
+            '.py', '.pyi', '.pyx', '.ipy',
+            # JavaScript/Web
+            '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.vue', '.svelte', '.astro',
+            '.html', '.htm', '.css', '.scss', '.sass', '.less', '.styl',
+            '.json', '.json5', '.xml', '.yaml', '.yml', '.toml', '.graphql', '.gql',
+            # C/C++
+            '.c', '.cpp', '.cxx', '.cc', '.cp', '.h', '.hpp', '.hxx', '.hh', '.inl', '.m', '.mm',
+            # JVM
+            '.java', '.kt', '.kts', '.scala', '.groovy', '.clj', '.cljs',
+            # .NET
+            '.cs', '.fs', '.vb',
+            # Go/Rust
+            '.go', '.rs',
+            # Shell/Scripting
+            '.sh', '.bash', '.zsh', '.fish', '.bat', '.ps1', '.cmd', '.awk', '.sed',
+            '.rb', '.php', '.pl', '.pm', '.lua', '.r', '.dart', '.el', '.vim',
+            # Config/Data
+            '.ini', '.conf', '.cfg', '.properties', '.env', '.env.example', '.csv', '.tsv', '.sql',
+            '.dockerfile', '.editorconfig', '.gitignore', '.gitattributes',
+            # Docs
+            '.md', '.markdown', '.rst', '.txt', '.tex', '.asc', '.adoc'
+        }
+        
+        # For now, simple walk + exclude hidden/.gits
+        for p in self.repo_path.rglob("*"):
+            if not p.is_file():
                 continue
-            yield p
+                
+            # Filter excluded dirs
+            parts = p.parts
+            if any(part.startswith(".") and part != "." and part != ".." for part in parts) or \
+               "venv" in parts or "__pycache__" in parts or "node_modules" in parts or "dist" in parts or "build" in parts:
+                continue
+
+            # Filter by extension (simple binary exclusion)
+            if p.suffix.lower() in SUPPORTED_EXTENSIONS:
+                yield p
+            elif p.name in ['Dockerfile', 'Makefile', 'LICENSE', 'Gemfile', 'Rakefile']:
+                 yield p
+
