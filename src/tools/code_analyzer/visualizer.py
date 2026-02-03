@@ -1,13 +1,50 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pathlib import Path
 from .models import FileAnalysis, ClassInfo
 from .cache_manager import CachingManager
+from .neo4j_adapter import Neo4jAdapter
 
 class CodeVisualizer:
-    def __init__(self, repo_path: Path):
+    def __init__(self, repo_path: Path, neo4j_adapter: Optional[Neo4jAdapter] = None):
         self.repo_path = repo_path
         self.cache = CachingManager()
+        self.neo4j = neo4j_adapter
         
+    def generate_call_graph(self, function_name: str, depth: int = 3) -> str:
+        """
+        Generate Mermaid flowchart for a call graph.
+        Requires Neo4j connection.
+        """
+        if not self.neo4j:
+            return "Error: Neo4j connection required for call graph visualization."
+            
+        data = self.neo4j.get_call_graph(function_name, depth)
+        if not data or not data.get("nodes"):
+            return f"No call graph found for {function_name}"
+            
+        mermaid_lines = ["graph TD"]
+        
+        # ID mapping to safe mermaid ids
+        id_map = {}
+        for i, node in enumerate(data["nodes"]):
+            safe_id = f"node_{i}"
+            id_map[node["id"]] = safe_id
+            
+            # Format label: File::Function -> Function
+            label = node["name"]
+            if "::" in label:
+                label = label.split("::")[-1]
+                
+            mermaid_lines.append(f"    {safe_id}[\"{label}\"]")
+            
+        for edge in data["edges"]:
+            src = id_map.get(edge["from"])
+            dst = id_map.get(edge["to"])
+            if src and dst:
+                mermaid_lines.append(f"    {src} --> {dst}")
+                
+        return "\n".join(mermaid_lines)
+
     def generate_mermaid_class_diagram(self) -> str:
         """
         Scans cached analysis results and generates a Mermaid class diagram.

@@ -56,6 +56,47 @@ class Neo4jAdapter:
             """)
             return [record["cycle"] for record in result]
             
+    def get_call_graph(self, root_function_name: str, depth: int = 3) -> Dict:
+        """
+        Retrieve call graph starting from a function name.
+        """
+        if not self.driver:
+            return {}
+        
+        query_pure = f"""
+        MATCH path = (start:Function)-[:CALLS*0..{depth}]->(end)
+        WHERE start.name CONTAINS $name
+        RETURN path
+        LIMIT 50
+        """
+        
+        try:
+            with self.driver.session() as session:
+                result = session.run(query_pure, {"name": root_function_name})
+                
+                nodes = {}
+                edges = []
+                
+                for record in result:
+                    path = record["path"]
+                    for node in path.nodes:
+                        nodes[node["id"]] = {
+                            "id": node["id"],
+                            "name": node.get("name", "Unknown"),
+                            "labels": list(node.labels)
+                        }
+                    for rel in path.relationships:
+                        edges.append({
+                            "from": rel.start_node["id"],
+                            "to": rel.end_node["id"],
+                            "type": rel.type
+                        })
+                
+                return {"nodes": list(nodes.values()), "edges": edges}
+        except Exception as e:
+            logger.error(f"Error fetching call graph: {e}")
+            return {}
+
     def store_analysis(self, analysis: FileAnalysis, repo_id: str, commit_hash: str = "HEAD"):
         """Store a single file analysis result into the graph"""
         if not self.driver: 
