@@ -41,7 +41,10 @@ class ChatAgent:
             self.console.print("[dim]Initializing Code Analysis Engine...[/dim]")
             
             # Initialize Code Analyzer
-            self.analyzer = CodeAnalyzer(self.session_id, self.repo_path)
+            # Use project_id if available to access learned knowledge base (project context)
+            # otherwise fallback to session_id (chat context)
+            analyzer_id = self.project_id if self.project_id else self.session_id
+            self.analyzer = CodeAnalyzer(analyzer_id, self.repo_path)
             
             # Connect to Neo4j (using default local config for now)
             # In a real scenario, we might prompt for these or read from .env if not set

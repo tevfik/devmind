@@ -2,6 +2,16 @@
 
 AI-powered CLI development assistant built on Ollama. Provides intelligent code analysis, command suggestions, error fixes, and git repository analysis through a command-line interface.
 
+## Documentation
+
+- [Quick Start](docs/QUICK_START.md) - Get up and running in minutes
+- [Installation Guide](docs/INSTALLATION.md) - Detailed installation instructions
+- [CLI Reference](docs/CLI_REFERENCE.md) - Complete command reference
+- [Architecture](docs/MEMORY_ARCH.md) - System architecture and memory design
+- [Docker Integration](docs/DOCKER_INTEGRATION.md) - Using DevMind with Docker
+- [Contributing](docs/CONTRIBUTING.md) - Guide for contributors
+- [Deep Analysis Guide](docs/DEEP_ANALYSIS_GUIDE.md) - Understanding the analysis engine
+
 ## Features
 
 - **Chat**: Interactive conversation about code
@@ -150,7 +160,7 @@ src/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on bug reports, feature requests, and code contributions.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on bug reports, feature requests, and code contributions.
 
 ## License
 

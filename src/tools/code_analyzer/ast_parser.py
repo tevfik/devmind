@@ -8,32 +8,26 @@ from typing import List, Optional, Union
 import logging
 
 from .models import FileAnalysis, ClassInfo, FunctionInfo, ImportInfo
+from .parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)
 
-class ASTParser:
+class ASTParser(BaseParser):
     """Parses Python code to extract structural information"""
 
-    def parse_file(self, file_path: Path, repo_root: Path) -> Optional[FileAnalysis]:
+    def parse(self, source_code: str, file_path: Path, repo_root: Path) -> Optional[FileAnalysis]:
         """
-        Parse a single Python file.
-        
-        Args:
-            file_path: Absolute path to the file
-            repo_root: Absolute structure root (to calculate relative path)
+        Parse Python source code.
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            
-            tree = ast.parse(content)
+            tree = ast.parse(source_code)
             
             rel_path = file_path.relative_to(repo_root).as_posix()
             
             analysis = FileAnalysis(
                 file_path=rel_path,
-                loc=len(content.splitlines()),
-                content_hash="" # TODO: Add hashing if needed here or handled by CacheManager
+                loc=len(source_code.splitlines()),
+                content_hash="" 
             )
             
             # Visitor pass
@@ -49,6 +43,19 @@ class ASTParser:
         except Exception as e:
             logger.error(f"Failed to parse {file_path}: {e}")
             return None
+
+    def parse_file(self, file_path: Path, repo_root: Path) -> Optional[FileAnalysis]:
+        """
+        Parse a single Python file.
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            return self.parse(content, file_path, repo_root)
+        except Exception as e:
+            logger.error(f"Failed to read/parse {file_path}: {e}")
+            return None
+
 
 class AnalysisVisitor(ast.NodeVisitor):
     """AST Visitor to extract info"""

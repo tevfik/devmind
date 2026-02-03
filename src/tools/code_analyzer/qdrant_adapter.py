@@ -182,3 +182,36 @@ class QdrantAdapter:
         """Delete the collection (useful for testing/reset)."""
         if self.client:
             self.client.delete_collection(self.collection_name)
+
+    def delete_by_filter(self, filter_key: str, filter_value: Any):
+        """
+        Delete points where filter_key == filter_value.
+        
+        Args:
+            filter_key: The payload key to filter by (e.g., "session_id")
+            filter_value: The value to match
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant client not connected")
+
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key=filter_key,
+                                match=models.MatchValue(value=filter_value),
+                            )
+                        ]
+                    )
+                ),
+            )
+            logger.info(f"Deleted points where {filter_key}={filter_value}")
+        except Exception as e:
+            # If collection doesn't exist, ignore
+            if "Not found" in str(e) or "doesn't exist" in str(e):
+                return
+            logger.error(f"Failed to delete points: {e}")
+            raise

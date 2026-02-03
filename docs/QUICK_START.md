@@ -8,7 +8,7 @@ git clone https://github.com/tevfik/devmind.git
 cd devmind
 
 # 2. Install (with all integrations: Qdrant, Neo4j, Ollama, LangChain, etc.)
-bash QUICK_INSTALL.sh
+bash docs/QUICK_INSTALL.sh
 
 # 3. Use
 devmind chat
@@ -38,7 +38,7 @@ DevMind is a fully functional AI development assistant:
 
 ### Option 1: Automatic Script
 ```bash
-bash QUICK_INSTALL.sh
+bash docs/QUICK_INSTALL.sh
 ```
 
 Automatically:

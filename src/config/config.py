@@ -70,6 +70,13 @@ class QdrantConfig(BaseSettings):
     use_local: bool = Field(default=False, validation_alias="QDRANT_USE_LOCAL")
 
 
+class LeannConfig(BaseSettings):
+    """Leann vector database configuration (experimental)"""
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Base path for storing indexes. If None, defaults to ~/.devmind/leann_indexes
+    base_path: Optional[str] = Field(default=None, validation_alias="LEANN_BASE_PATH")
+
+
 class Neo4jConfig(BaseSettings):
     """Neo4j graph database configuration"""
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

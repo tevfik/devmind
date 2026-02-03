@@ -2,6 +2,26 @@
 
 Complete reference for all DevMind commands and their usage.
 
+## ⚡ Quick Reference (Cheat Sheet)
+
+### Session vs Project
+| Concept | Purpose | Command |
+|---------|---------|---------|
+| **Session** | Chat conversation history | `devmind session ...` |
+| **Project** | Group of learned repositories | `devmind project ...` |
+
+### Top Commands
+```bash
+# Chat with project context
+devmind chat --project-id=my-app
+
+# Create chat session
+devmind session new --name="Feature X"
+
+# Learn repo into project
+devmind learn ./backend --project-id=my-app
+```
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
@@ -109,7 +129,7 @@ devmind learn [PATH] [OPTIONS]
 - `PATH` - Repository path (default: current directory)
 
 **Options:**
-- `--session-id <ID>` - Custom session ID for multi-repo projects
+- `--project-id <ID>` - Custom project ID for multi-repo projects
 - `--incremental` - Only analyze changed files (faster)
 
 **Examples:**
@@ -121,10 +141,10 @@ devmind learn ~/projects/backend
 
 **Multi-Repository Project:**
 ```bash
-# Learn multiple repos under same session
-devmind learn ~/projects/backend --session-id=my-saas-app
-devmind learn ~/projects/frontend --session-id=my-saas-app
-devmind learn ~/projects/auth --session-id=my-saas-app
+# Learn multiple repos under same project
+devmind learn ~/projects/backend --project-id=my-saas-app
+devmind learn ~/projects/frontend --project-id=my-saas-app
+devmind learn ~/projects/auth --project-id=my-saas-app
 
 # Now you can query across all three repos!
 ```
@@ -222,7 +242,7 @@ DevMind has **two distinct session types**:
 
 2. **Projects** (via `devmind project`)
    - Groups multiple **learned repositories** together
-   - Created with `devmind learn --session-id=PROJECT_NAME`
+   - Created with `devmind learn --project-id=PROJECT_NAME`
    - Used to organize multi-repo systems (microservices, monorepos)
    - Stores code graph, AST analysis, and embeddings
    - Example: "my-saas-app", "ml-pipeline", "legacy-system"
@@ -673,21 +693,21 @@ Architecture:
 
 ### Multi-Repository Projects
 
-Learn multiple related repositories under a single session:
+Learn multiple related repositories under a single project:
 
 ```bash
 # Microservices architecture
-devmind learn ~/services/api-gateway --session-id=microservices
-devmind learn ~/services/user-service --session-id=microservices
-devmind learn ~/services/payment-service --session-id=microservices
-devmind learn ~/services/notification-service --session-id=microservices
+devmind learn ~/services/api-gateway --project-id=microservices
+devmind learn ~/services/user-service --project-id=microservices
+devmind learn ~/services/payment-service --project-id=microservices
+devmind learn ~/services/notification-service --project-id=microservices
 
 # Now query across all services
-devmind chat --session-id=microservices
+devmind chat --project-id=microservices
 > "How does the payment flow work across services?"
 ```
 
-**Why use session IDs?**
+**Why use project IDs?**
 - **Focus queries**: Only search relevant repositories
 - **Organize projects**: Keep different projects separate
 - **Performance**: Faster searches with filtered context
@@ -696,18 +716,18 @@ devmind chat --session-id=microservices
 **Example Workflow:**
 ```bash
 # Learn your microservices
-devmind learn ~/work/backend --session-id=work-project
-devmind learn ~/work/frontend --session-id=work-project
+devmind learn ~/work/backend --project-id=work-project
+devmind learn ~/work/frontend --project-id=work-project
 
 # Learn your side project
-devmind learn ~/hobby/game-engine --session-id=hobby-project
+devmind learn ~/hobby/game-engine --project-id=hobby-project
 
 # Query work project only
-devmind chat --session-id=work-project
+devmind chat --project-id=work-project
 > "How is user authentication implemented?"
 
 # Query hobby project only  
-devmind chat --session-id=hobby-project
+devmind chat --project-id=hobby-project
 > "How does the physics engine work?"
 
 # List all sessions
@@ -720,10 +740,10 @@ For large codebases, use incremental mode after initial learning:
 
 ```bash
 # Initial learning (full scan)
-devmind learn ~/large-project --session-id=main
+devmind learn ~/large-project --project-id=main
 
 # After code changes (only changed files)
-devmind learn ~/large-project --session-id=main --incremental
+devmind learn ~/large-project --project-id=main --incremental
 ```
 
 ### Session-Based Queries
@@ -826,17 +846,17 @@ OLLAMA_BASE_URL=http://localhost:11434
 #### Test 1: Learn and Create a Project
 ```bash
 # Learn a repository with a project ID
-devmind learn /path/to/repo --session-id=test-project
+devmind learn /path/to/repo --project-id=test-project
 
 # Or use current directory
 cd /path/to/repo
-devmind learn . --session-id=test-project
+devmind learn . --project-id=test-project
 ```
 
 **Expected Output:**
 ```
 🧠 Deep Learning Repository: repo-name
-Session ID: test-project
+Project ID: test-project
 ✅ Connected to Neo4j
 📊 Analyzing codebase...
 ✅ Analysis complete
@@ -964,12 +984,12 @@ devmind project list
 📚 Learned Projects
 
 No projects found. Create one with:
-  devmind learn <path> --session-id=<name>
+  devmind learn <path> --project-id=<name>
 ```
 
 ### Verification Checklist
 
-- [ ] Project creation works with `--session-id` parameter
+- [ ] Project creation works with `--project-id` parameter
 - [ ] `devmind project list` shows all projects
 - [ ] `devmind project show` displays correct statistics
 - [ ] Chat with `--project-id` limits context to that project only
@@ -1029,10 +1049,10 @@ docker start qdrant
 **"No results in chat"**
 ```bash
 # Re-learn the repository
-devmind learn . --session-id=my-project
+devmind learn . --project-id=my-project
 
-# Check session has data
-devmind session show my-project
+# Check project has data
+devmind project show my-project
 ```
 
 **"Session not found"**

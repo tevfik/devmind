@@ -59,6 +59,26 @@ class CodeChunker:
                 if method_chunk:
                     chunks.append(method_chunk)
                     
+        # 3. If no structural chunks found (e.g., non-Python or flat script)
+        # Create a generic file chunk
+        if not chunks and source_code.strip():
+            # Simple content truncation for now
+            # TODO: Implement sliding window for large files
+            description = f"Content of file {rel_path}"
+            
+            chunks.append(CodeChunk(
+                chunk_id=f"{rel_path}::whole",
+                text_content=f"File: {rel_path}\nType: File Content\nLanguage: {file_analysis.language}\n\n{source_code[:3000]}",
+                metadata={
+                    "id": f"{rel_path}::whole",
+                    "file_path": rel_path,
+                    "type": "file",
+                    "name": rel_path.split("/")[-1],
+                    "language": file_analysis.language
+                },
+                original_source=source_code[:5000]
+            ))
+                    
         return chunks
 
     def _extract_source(self, start: int, end: int, lines: List[str]) -> str:
