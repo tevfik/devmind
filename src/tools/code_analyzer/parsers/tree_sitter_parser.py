@@ -40,17 +40,49 @@ class TreeSitterParser(BaseParser):
         
         # C++ / C Queries
         if self.language_name in ['cpp', 'c']:
+            # More robust function definition query for C/C++
+            # Handles:
+            # 1. int foo()
+            # 2. int *foo()
+            # 3. static int foo()
+            # 4. struct A foo()
             self.queries['functions'] = """
             (function_definition
               declarator: (function_declarator
                 declarator: (identifier) @func.name)
             ) @func.def
+            
+            (function_definition
+              declarator: (pointer_declarator
+                declarator: (function_declarator
+                  declarator: (identifier) @func.name))
+            ) @func.def
+            
+            (function_definition
+               declarator: (pointer_declarator
+                  declarator: (pointer_declarator
+                     declarator: (function_declarator
+                        declarator: (identifier) @func.name)))
+            ) @func.def
             """
+            
+            # Struct/Class Queries
             self.queries['classes'] = """
-            (class_specifier
+            (struct_specifier
               name: (type_identifier) @class.name
             ) @class.def
             """
+            
+            # Add C++ specific class specifier only for cpp lang? 
+            # Or make it optional? 
+            # Tree-sitter strictness might fail if node type doesn't exist in grammar
+            if self.language_name == 'cpp':
+                self.queries['classes'] += """
+                (class_specifier
+                  name: (type_identifier) @class.name
+                ) @class.def
+                """
+            
             self.queries['calls'] = """
             (call_expression
               function: (identifier) @call.name
