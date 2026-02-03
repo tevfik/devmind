@@ -488,11 +488,13 @@ def handle_chat(args):
     print("\n🤖 DevMind AI Chat (Type 'exit' to quit)\n")
     print("💡 Tip: Ask anything about your code, get AI assistance\n")
     
+    agent = None
     try:
-        from agents.agent_base import create_llm
+        from agents.agent_chat import ChatAgent
+        import uuid
         
-        llm = create_llm()
-        chat_history = []
+        session_id = f"chat_{uuid.uuid4().hex[:8]}"
+        agent = ChatAgent(session_id=session_id)
         
         while True:
             try:
@@ -504,13 +506,11 @@ def handle_chat(args):
                 if not user_input:
                     continue
                 
-                # Add to history
-                chat_history.append({"role": "user", "content": user_input})
-                
                 # Get AI response
-                response = llm.invoke(user_input)
+                console.print("\n[cyan]DevMind:[/cyan]")
+                with console.status("[bold green]Thinking...[/bold green]", spinner="dots"):
+                    response = agent.chat(user_input)
                 
-                console.print("\n[cyan]Assistant:[/cyan]")
                 format_response(response)
                 
             except KeyboardInterrupt:
@@ -518,9 +518,13 @@ def handle_chat(args):
                 break
     except ImportError as e:
         print(f"⚠️  AI features not available: {e}")
-    except AttributeError:
-        print("⚠️  Configuration error. Please run: devmind setup")
-        print("   Please run: pip install -e .[full]")
+    except Exception as e:
+        print(f"⚠️  An error occurred: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        if agent:
+            agent.close()
 
 
 def handle_analyze(args):

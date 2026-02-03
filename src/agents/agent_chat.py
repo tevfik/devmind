@@ -1,0 +1,103 @@
+"""
+Chat Agent Integration
+Integrates RAG, Code Analysis, and LLM for interactive chat.
+"""
+
+import logging
+from pathlib import Path
+from typing import Optional, List, Dict
+import time
+
+from rich.console import Console
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
+from tools.code_analyzer.analyzer import CodeAnalyzer
+from tools.rag.rag_service import RAGService
+from agents.agent_base import create_llm
+
+logger = logging.getLogger(__name__)
+
+class ChatAgent:
+    """
+    Intelligent Agent for DevMind Chat.
+    Combines general LLM capabilities with RAG-based code knowledge.
+    """
+    
+    def __init__(self, session_id: str, repo_path: str = "."):
+        self.console = Console()
+        self.session_id = session_id
+        self.repo_path = Path(repo_path)
+        self.analyzer: Optional[CodeAnalyzer] = None
+        self.rag_service: Optional[RAGService] = None
+        self.history = []
+        self._llm = None
+        
+        self._initialize_resources()
+        
+    def _initialize_resources(self):
+        """Initialize Analyzer and RAG service."""
+        try:
+            self.console.print("[dim]Initializing Code Analysis Engine...[/dim]")
+            
+            # Initialize Code Analyzer
+            self.analyzer = CodeAnalyzer(self.session_id, self.repo_path)
+            
+            # Connect to Neo4j (using default local config for now)
+            # In a real scenario, we might prompt for these or read from .env if not set
+            # For now, let's assume default localhost:7687
+            try:
+                self.analyzer.connect_db("bolt://localhost:7687", ("neo4j", "password"))
+            except Exception as e:
+                logger.warning(f"Could not connect to Neo4j: {e}")
+                self.console.print("[yellow]Warning: Graph database not connected (Neo4j). Structure queries may fail.[/yellow]")
+
+            # Initialize RAG
+            self.console.print("[dim]Initializing Semantic Engine...[/dim]")
+            self.analyzer.init_rag()
+            self.rag_service = self.analyzer.rag_service
+            
+            # Initialize basic LLM for conversational parts
+            self._llm = create_llm()
+            
+            self.console.print("[green]Ready![/green]")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize ChatAgent: {e}")
+            self.console.print(f"[red]Error initializing agent resources: {e}[/red]")
+
+    def chat(self, user_input: str) -> str:
+        """
+        Process a user message and return the response.
+        Decides whether to use RAG or simple Chat.
+        """
+        self.history.append(HumanMessage(content=user_input))
+        
+        # Heuristic: If we have RAG service, let's use it for code queries
+        # The RAG service already does intent classification.
+        # But for "Hi", "Hello" etc, we might want to skip RAG overhead?
+        # RAG service intent classifier should handle "Chat" intent too theoretically, 
+        # but let's stick to our RAGService logic which returns "I couldn't find..." if not relevant,
+        # or performs hybrid retrieval.
+        
+        response_text = ""
+        
+        if self.rag_service:
+            # Enriched query using RAG
+            try:
+                response_text = self.rag_service.answer(user_input)
+            except Exception as e:
+                logger.error(f"RAG Error: {e}")
+                response_text = f"I encountered an error accessing the codebase knowledge: {e}"
+        else:
+            # Fallback to simple LLM
+            try:
+                resp = self._llm.invoke(user_input)
+                response_text = resp.content if hasattr(resp, 'content') else str(resp)
+            except Exception as e:
+                response_text = f"Error: {e}"
+
+        return response_text
+
+    def close(self):
+        if self.analyzer:
+            self.analyzer.close()

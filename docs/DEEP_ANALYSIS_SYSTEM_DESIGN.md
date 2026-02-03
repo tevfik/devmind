@@ -617,7 +617,7 @@ tests/
 
 - [x] **Hybrid Query Engine**
     - [x] Create `RAGService` combining Neo4j (Structure) + Qdrant (Meaning).
-    - [ ] Implement prompts: `CONCEPT_EXPLAINER`, `SIMILAR_CODE_FINDER`.
+    - [x] Implement prompts: `CONCEPT_EXPLAINER`, `SIMILAR_CODE_FINDER`.
 
 ### 🤖 Phase 4: Intelligence, Chat & Polish [Week 4]
 **Goal:** Natural Language Interface and Production Readiness.
