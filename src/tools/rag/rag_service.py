@@ -105,7 +105,7 @@ class RAGService:
                 logger.info(f"Starting semantic search for: {question[:50]}...")
                 query_vec = self.embedder.embed_query(question)
                 logger.info(f"Query vector generated, length: {len(query_vec)}")
-                results = self.qdrant.search(query_vec, limit=5, score_threshold=0.5)  # Lowered from 0.6 to 0.5
+                results = self.qdrant.search(query_vec, limit=5, score_threshold=0.3)  # Lowered to 0.3 for multilingual support
                 
                 logger.info(f"Qdrant search returned {len(results)} results")
                 if results:
