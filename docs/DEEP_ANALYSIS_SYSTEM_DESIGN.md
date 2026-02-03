@@ -606,13 +606,13 @@ tests/
 **Goal:** Understand what the code *means* using Vector DB.
 
 - [ ] **Semantic Engine**
-    - [ ] Implement `CodeEmbedder`.
+    - [x] Implement `CodeEmbedder`.
     - [ ] **Enhancement:** Context-Aware Chunking strategy:
         - [ ] Chunk = `Docstring` + `Signature` + `Body subset` + `Context Tags`.
     - [ ] **[TEST]** Verify chunking logic in `tests/unit/semantic/test_chunking.py`.
 
 - [ ] **Vector Storage (Qdrant)**
-    - [ ] Implement `QdrantAdapter` for `repository_code` collection.
+    - [x] Implement `QdrantAdapter` for `repository_code` collection.
     - [ ] Implement "Code Clone Detection" logic (Cosine Similarity).
 
 - [ ] **Hybrid Query Engine**

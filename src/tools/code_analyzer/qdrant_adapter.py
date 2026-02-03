@@ -1,0 +1,177 @@
+"""
+Qdrant Adapter for Vector Storage
+
+This module manages interactions with the Qdrant vector database,
+storing and retrieving code embeddings.
+"""
+
+import logging
+import uuid
+from typing import List, Dict, Any, Optional, Union
+
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from qdrant_client.http.exceptions import UnexpectedResponse
+
+from src.config.config import QdrantConfig
+
+logger = logging.getLogger(__name__)
+
+class QdrantAdapter:
+    """
+    Adapter for Qdrant Vector Database.
+    """
+
+    def __init__(self, config: Optional[QdrantConfig] = None):
+        """
+        Initialize the Qdrant adapter.
+
+        Args:
+            config: Optional QdrantConfig.
+        """
+        self.config = config or QdrantConfig()
+        self.client: Optional[QdrantClient] = None
+        self.collection_name = self.config.collection
+        self._connect()
+
+    def _connect(self):
+        """Establish connection to Qdrant."""
+        try:
+            if self.config.use_local:
+                if self.config.path:
+                    logger.info(f"Connecting to local Qdrant at path: {self.config.path}")
+                    self.client = QdrantClient(path=self.config.path)
+                else:
+                    logger.info("Connecting to in-memory Qdrant")
+                    self.client = QdrantClient(location=":memory:")
+            else:
+                logger.info(f"Connecting to Qdrant server at {self.config.host}:{self.config.port}")
+                self.client = QdrantClient(
+                    host=self.config.host,
+                    port=self.config.port,
+                    # Add api_key if needed later
+                )
+        except Exception as e:
+            logger.error(f"Failed to connect to Qdrant: {e}")
+            raise
+
+    def ensure_collection(self, vector_size: int = 768):
+        """
+        Ensure the collection exists with the correct vector size.
+
+        Args:
+            vector_size: Dimension of the embeddings (default 768 for nomic-embed-text)
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant client not connected")
+
+        try:
+            collections = self.client.get_collections()
+            exists = any(c.name == self.collection_name for c in collections.collections)
+
+            if not exists:
+                logger.info(f"Creating collection '{self.collection_name}' with size {vector_size}")
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=models.VectorParams(
+                        size=vector_size,
+                        distance=models.Distance.COSINE
+                    )
+                )
+            else:
+                logger.debug(f"Collection '{self.collection_name}' already exists")
+        except Exception as e:
+            logger.error(f"Error ensuring collection: {e}")
+            raise
+
+    def store_embeddings(self, items: List[Dict[str, Any]]):
+        """
+        Store code snippets and their embeddings.
+
+        Args:
+            items: List of dicts containing 'embedding' and metadata keys.
+                   Must contain 'embedding'.
+        """
+        if not items:
+            return
+
+        # Ensure collection exists based on first item's embedding size
+        vector_size = len(items[0]['embedding'])
+        self.ensure_collection(vector_size)
+
+        points = []
+        for item in items:
+            embedding = item.get('embedding')
+            if not embedding:
+                continue
+            
+            # Generate a deterministic ID if possible, or random
+            # Ideally use a hash of the file path + content signature
+            # For now, using uuid if 'id' not present
+            point_id = item.get('id') or str(uuid.uuid4())
+            
+            # Separate payload from embedding
+            payload = {k: v for k, v in item.items() if k not in ['embedding', 'id']}
+            
+            points.append(models.PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload=payload
+            ))
+
+        if points:
+            try:
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=points
+                )
+                logger.info(f"Stored {len(points)} vectors in {self.collection_name}")
+            except Exception as e:
+                logger.error(f"Failed to upsert points: {e}")
+                raise
+
+    def search(self, query_vector: List[float], limit: int = 5, score_threshold: float = 0.0) -> List[Dict[str, Any]]:
+        """
+        Search for similar code snippets.
+
+        Args:
+            query_vector: The query embedding
+            limit: Max results
+            score_threshold: Minimum similarity score
+
+        Returns:
+            List of results with payload and score
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant client not connected")
+
+        try:
+            search_result = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=limit,
+                score_threshold=score_threshold
+            )
+
+            results = []
+            for hit in search_result:
+                results.append({
+                    "id": hit.id,
+                    "score": hit.score,
+                    "payload": hit.payload
+                })
+            return results
+        except UnexpectedResponse as e:
+            # If collection doesn't exist, return empty
+            if "Not found" in str(e):
+                logger.warning(f"Collection {self.collection_name} not found")
+                return []
+            raise
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            raise
+
+    def delete_collection(self):
+        """Delete the collection (useful for testing/reset)."""
+        if self.client:
+            self.client.delete_collection(self.collection_name)
