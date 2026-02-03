@@ -91,7 +91,12 @@ class ChatAgent:
         if self.rag_service:
             # Enriched query using RAG with optional project filtering
             try:
-                response_text = self.rag_service.answer(user_input, session_id=self.project_id)
+                # Pass history so RAG can perform query rewriting (coreference resolution)
+                response_text = self.rag_service.answer(
+                    user_input, 
+                    session_id=self.project_id,
+                    chat_history=self.history[:-1] # Exclude current message which was just appended
+                )
             except Exception as e:
                 self.console.print(f"[yellow]RAG Error: {e}[/yellow]")
                 response_text = f"I encountered an error accessing the codebase knowledge: {e}"

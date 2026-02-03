@@ -84,6 +84,42 @@ class RAGService:
         # Similarity Analysis
         similarity_template = self._load_prompt("similar_code_finder.md")
         self.similarity_prompt = ChatPromptTemplate.from_template(similarity_template)
+        
+        # Query Rewriter (History Context)
+        rewriter_template = self._load_prompt("query_rewriter.md")
+        self.rewriter_prompt = ChatPromptTemplate.from_template(rewriter_template)
+
+    def rewrite_query(self, question: str, chat_history: List[Any]) -> str:
+        """
+        Rewrite question to be standalone using chat history.
+        """
+        if not chat_history:
+            return question
+            
+        try:
+            # Format history for prompt
+            history_text = ""
+            for msg in chat_history[-6:]: # Look at last few messages
+                role = "User" if msg.type == "human" else "Assistant"
+                content = msg.content
+                history_text += f"{role}: {content}\n"
+                
+            chain = self.rewriter_prompt | self.llm | StrOutputParser()
+            rewritten = chain.invoke({
+                "history": history_text, 
+                "question": question
+            }).strip()
+            
+            # Sanity check: if empty or failed, return original
+            if not rewritten:
+                return question
+                
+            logger.info(f"Rewrote query: '{question}' -> '{rewritten}'")
+            return rewritten
+            
+        except Exception as e:
+            logger.warning(f"Query rewriting failed: {e}")
+            return question
 
     def retrieve_context(self, question: str, strategy: str = "HYBRID", session_id: str = None) -> str:
         """
@@ -153,18 +189,24 @@ class RAGService:
         logger.info(f"Final context length: {len(final_context)} chars")
         return final_context
 
-    def answer(self, question: str, session_id: str = None) -> str:
+    def answer(self, question: str, session_id: str = None, chat_history: List[Any] = None) -> str:
         """
         End-to-end RAG pipeline.
         
         Args:
             question: User's question
             session_id: Optional session ID to query across multiple repos
+            chat_history: List of previous messages for context
         """
-        # 1. Determine Intent
+        # 0. Rewrite Query with History
+        standalone_question = question
+        if chat_history:
+            standalone_question = self.rewrite_query(question, chat_history)
+
+        # 1. Determine Intent (using standalone question)
         try:
             intent_chain = self.intent_prompt | self.llm | StrOutputParser()
-            intent_response = intent_chain.invoke({"question": question}).strip()
+            intent_response = intent_chain.invoke({"question": standalone_question}).strip()
             logger.info(f"Query Intent Response: {intent_response[:100]}...")
             
             # Extract intent label from response (look for CHAT, STRUCTURE, SEMANTIC, or HYBRID)
@@ -194,20 +236,21 @@ class RAGService:
         # Handle CHAT intent - direct LLM response without RAG
         if "CHAT" in intent.upper():
             try:
-                chat_response = self.llm.invoke(question)
+                # Use standalone_question for better context even in chat
+                chat_response = self.llm.invoke(standalone_question)
                 return chat_response.content if hasattr(chat_response, 'content') else str(chat_response)
             except Exception as e:
                 logger.error(f"Chat LLM invocation failed: {e}")
                 return "I'm here! How can I help you with your codebase?"
         
-        # 2. Retrieve context for code-related queries
-        context = self.retrieve_context(question, strategy=intent, session_id=session_id)
+        # 2. Retrieve context for code-related queries (using standalone question)
+        context = self.retrieve_context(standalone_question, strategy=intent, session_id=session_id)
         
         if not context.strip():
             return "I couldn't find relevant information in the codebase to answer that."
             
-        # 3. Generate Answer using RAG
+        # 3. Generate Answer using RAG (using standalone question)
         qa_chain = self.qa_prompt | self.llm | StrOutputParser()
-        response = qa_chain.invoke({"context": context, "question": question})
+        response = qa_chain.invoke({"context": context, "question": standalone_question})
         
         return response
