@@ -262,6 +262,7 @@ class TreeSitterParser(BaseParser):
         # Organize by definition node
         functions_map = {} # node.id -> info
         
+        # First pass: Identify all function definitions
         for node, name in captures:
             if name == 'func.def':
                 functions_map[node.id] = {
@@ -270,10 +271,11 @@ class TreeSitterParser(BaseParser):
                     'start_line': node.start_point[0] + 1,
                     'end_line': node.end_point[0] + 1
                 }
-            elif name == 'func.name':
-                # Parent or ancestor should be in map? 
-                # name node is inside declarator inside function_definition
-                # Find the parent in map
+        
+        # Second pass: Associate names with definitions
+        for node, name in captures:
+            if name == 'func.name':
+                # Traverse up to find the parent function definition
                 parent = node
                 while parent:
                     if parent.id in functions_map:
@@ -297,6 +299,7 @@ class TreeSitterParser(BaseParser):
         
         classes_map = {}
         
+        # First pass: Identify all class definitions
         for node, name in captures:
             if name == 'class.def':
                 classes_map[node.id] = {
@@ -305,7 +308,10 @@ class TreeSitterParser(BaseParser):
                     'start_line': node.start_point[0] + 1,
                     'end_line': node.end_point[0] + 1
                 }
-            elif name == 'class.name':
+                
+        # Second pass: Associate names with classes
+        for node, name in captures:
+            if name == 'class.name':
                  parent = node
                  while parent:
                     if parent.id in classes_map:
