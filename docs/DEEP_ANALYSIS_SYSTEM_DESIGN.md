@@ -576,7 +576,7 @@ tests/
     - [x] **[TEST]** Write `tests/unit/graph/test_neo4j_adapter.py` with mock driver.
     - [x] Implement `batch_insert_nodes()` (Files, Classes, Functions).
     - [x] Implement `batch_insert_relationships()` (CONTAINS, DEFINES).
-    - [ ] **Feature:** Add `commit_hash` and `version` properties to all nodes.
+    - [x] **Feature:** Add `commit_hash` and `version` properties to all nodes.
 
 - [x] **CLI & Visualization**
     - [x] Add `devmind analyze --deep` command.
@@ -590,11 +590,11 @@ tests/
     - [x] Implement `CallGraphBuilder` (Static calls).
     - [x] **[TEST]** Test call graph with `tests/unit/graph/test_call_graph.py`.
     - [x] Implement `ImportResolver` (Map imports to actual files/modules).
-    - [ ] **Feature:** Circular Dependency Detection logic.
+    - [x] **Feature:** Circular Dependency Detection logic.
 
-- [ ] **Incremental Learning Engine**
-    - [ ] Add `devmind learn --incremental` flag.
-    - [ ] Logic: Get `git diff` -> identify changed files -> re-parse ONLY those.
+- [x] **Incremental Learning Engine**
+    - [x] Add `devmind analyze --incremental` flag.
+    - [x] Logic: Get `git diff` -> identify changed files -> re-parse ONLY those.
     - [ ] **[TEST]** `tests/integration/test_incremental_learning.py`.
 
 - [x] **Impact Analysis & Simulation**
