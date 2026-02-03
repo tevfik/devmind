@@ -114,7 +114,7 @@ class QdrantAdapter:
             else:
                 point_id = str(uuid.uuid4())
             
-            # Separate payload from embedding
+            # Separate payload from embedding (exclude 'id' and 'embedding')
             payload = {k: v for k, v in item.items() if k not in ['embedding', 'id']}
             
             points.append(models.PointStruct(
