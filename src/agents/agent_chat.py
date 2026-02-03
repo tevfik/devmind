@@ -48,22 +48,25 @@ class ChatAgent:
             try:
                 self.analyzer.connect_db("bolt://localhost:7687", ("neo4j", "password"))
             except Exception as e:
-                logger.warning(f"Could not connect to Neo4j: {e}")
-                self.console.print("[yellow]Warning: Graph database not connected (Neo4j). Structure queries may fail.[/yellow]")
+                self.console.print(f"[yellow]Warning: Graph database not connected (Neo4j): {e}[/yellow]")
 
             # Initialize RAG
             self.console.print("[dim]Initializing Semantic Engine...[/dim]")
-            self.analyzer.init_rag()
-            self.rag_service = self.analyzer.rag_service
+            try:
+                self.analyzer.init_rag()
+                self.rag_service = self.analyzer.rag_service
+                self.console.print("[green]Ready![/green]")
+            except Exception as rag_err:
+                self.console.print(f"[yellow]Warning: RAG service initialization failed: {rag_err}[/yellow]")
+                self.console.print("[dim]Continuing without semantic search capabilities[/dim]")
             
             # Initialize basic LLM for conversational parts
             self._llm = create_llm()
             
-            self.console.print("[green]Ready![/green]")
-            
         except Exception as e:
-            logger.error(f"Failed to initialize ChatAgent: {e}")
+            import traceback
             self.console.print(f"[red]Error initializing agent resources: {e}[/red]")
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
     def chat(self, user_input: str) -> str:
         """
@@ -86,7 +89,7 @@ class ChatAgent:
             try:
                 response_text = self.rag_service.answer(user_input)
             except Exception as e:
-                logger.error(f"RAG Error: {e}")
+                self.console.print(f"[yellow]RAG Error: {e}[/yellow]")
                 response_text = f"I encountered an error accessing the codebase knowledge: {e}"
         else:
             # Fallback to simple LLM
