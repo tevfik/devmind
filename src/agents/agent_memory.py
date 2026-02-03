@@ -91,7 +91,7 @@ class MemoryManager:
         
         # Add authentication if configured
         if config.ollama.username and config.ollama.password:
-            embedding_kwargs["auth_tuple"] = (config.ollama.username, config.ollama.password)
+            embedding_kwargs["client_kwargs"] = {"auth": (config.ollama.username, config.ollama.password)}
             logger.info(f"🔐 Ollama embeddings with basic auth enabled")
         
         self.embeddings = OllamaEmbeddings(**embedding_kwargs)

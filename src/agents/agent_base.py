@@ -311,7 +311,7 @@ def create_llm(model_type: str = "general", **kwargs) -> ChatOllama:
     
     # Build auth tuple if credentials provided
     if username and password:
-        kwargs['auth_tuple'] = (username, password)
+        kwargs['auth'] = (username, password)
         logger.info(f"🔐 Ollama authentication enabled for user: {username}")
     
     # Add SQL Logger Callback if available
