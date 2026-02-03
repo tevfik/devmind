@@ -23,9 +23,10 @@ class ChatAgent:
     Combines general LLM capabilities with RAG-based code knowledge.
     """
     
-    def __init__(self, session_id: str, repo_path: str = "."):
+    def __init__(self, session_id: str, repo_path: str = ".", project_id: str = None):
         self.console = Console()
-        self.session_id = session_id
+        self.session_id = session_id  # Chat session ID
+        self.project_id = project_id  # Project ID for filtering repos in RAG
         self.repo_path = Path(repo_path)
         self.analyzer: Optional[CodeAnalyzer] = None
         self.rag_service: Optional[RAGService] = None
@@ -85,9 +86,9 @@ class ChatAgent:
         response_text = ""
         
         if self.rag_service:
-            # Enriched query using RAG
+            # Enriched query using RAG with optional project filtering
             try:
-                response_text = self.rag_service.answer(user_input)
+                response_text = self.rag_service.answer(user_input, session_id=self.project_id)
             except Exception as e:
                 self.console.print(f"[yellow]RAG Error: {e}[/yellow]")
                 response_text = f"I encountered an error accessing the codebase knowledge: {e}"

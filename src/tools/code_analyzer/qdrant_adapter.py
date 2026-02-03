@@ -134,7 +134,7 @@ class QdrantAdapter:
                 logger.error(f"Failed to upsert points: {e}")
                 raise
 
-    def search(self, query_vector: List[float], limit: int = 5, score_threshold: float = 0.0) -> List[Dict[str, Any]]:
+    def search(self, query_vector: List[float], limit: int = 5, score_threshold: float = 0.0, query_filter = None) -> List[Dict[str, Any]]:
         """
         Search for similar code snippets.
 
@@ -142,6 +142,7 @@ class QdrantAdapter:
             query_vector: The query embedding
             limit: Max results
             score_threshold: Minimum similarity score
+            query_filter: Optional Qdrant Filter for filtering results (e.g., by session_id)
 
         Returns:
             List of results with payload and score
@@ -155,7 +156,8 @@ class QdrantAdapter:
                 collection_name=self.collection_name,
                 query=query_vector,
                 limit=limit,
-                score_threshold=score_threshold
+                score_threshold=score_threshold,
+                query_filter=query_filter
             )
 
             results = []

@@ -85,11 +85,16 @@ class RAGService:
         similarity_template = self._load_prompt("similar_code_finder.md")
         self.similarity_prompt = ChatPromptTemplate.from_template(similarity_template)
 
-    def retrieve_context(self, question: str, strategy: str = "HYBRID") -> str:
+    def retrieve_context(self, question: str, strategy: str = "HYBRID", session_id: str = None) -> str:
         """
         Retrieve relevant context based on strategy.
+        
+        Args:
+            question: User's question
+            strategy: CHAT, STRUCTURE, SEMANTIC, or HYBRID
+            session_id: Optional session ID to filter results (for multi-repo queries)
         """
-        logger.info(f"retrieve_context called with strategy: {strategy}")
+        logger.info(f"retrieve_context called with strategy: {strategy}, session_id: {session_id}")
         context_parts = []
         
         # 1. Structural Retrieval (Neo4j)
@@ -105,7 +110,27 @@ class RAGService:
                 logger.info(f"Starting semantic search for: {question[:50]}...")
                 query_vec = self.embedder.embed_query(question)
                 logger.info(f"Query vector generated, length: {len(query_vec)}")
-                results = self.qdrant.search(query_vec, limit=5, score_threshold=0.3)  # Lowered to 0.3 for multilingual support
+                
+                # Apply session_id filter if provided
+                filter_condition = None
+                if session_id:
+                    from qdrant_client import models
+                    filter_condition = models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="session_id",
+                                match=models.MatchValue(value=session_id)
+                            )
+                        ]
+                    )
+                    logger.info(f"Filtering by session_id: {session_id}")
+                
+                results = self.qdrant.search(
+                    query_vec, 
+                    limit=5, 
+                    score_threshold=0.3,
+                    query_filter=filter_condition
+                )
                 
                 logger.info(f"Qdrant search returned {len(results)} results")
                 if results:
@@ -128,9 +153,13 @@ class RAGService:
         logger.info(f"Final context length: {len(final_context)} chars")
         return final_context
 
-    def answer(self, question: str) -> str:
+    def answer(self, question: str, session_id: str = None) -> str:
         """
         End-to-end RAG pipeline.
+        
+        Args:
+            question: User's question
+            session_id: Optional session ID to query across multiple repos
         """
         # 1. Determine Intent
         try:
@@ -172,7 +201,7 @@ class RAGService:
                 return "I'm here! How can I help you with your codebase?"
         
         # 2. Retrieve context for code-related queries
-        context = self.retrieve_context(question, strategy=intent)
+        context = self.retrieve_context(question, strategy=intent, session_id=session_id)
         
         if not context.strip():
             return "I couldn't find relevant information in the codebase to answer that."

@@ -42,18 +42,30 @@ class Neo4jAdapter:
                 except Exception as e:
                     logger.warning(f"Schema init warning: {e}")
 
-    def detect_circular_dependencies(self):
+    def detect_circular_dependencies(self, repo_id: str = None):
         """Find circular function calls in the graph"""
         if not self.driver:
             return []
             
         with self.driver.session() as session:
-            result = session.run("""
-                MATCH path = (n:Function)-[:CALLS*1..5]->(n)
-                RETURN [x in nodes(path) | x.id] as cycle, length(path) as len
-                ORDER BY len ASC
-                LIMIT 10
-            """)
+            if repo_id:
+                # Filter by repo_id if provided
+                result = session.run("""
+                    MATCH (f:File {repo_id: $repo_id})
+                    MATCH path = (n:Function)-[:CALLS*1..5]->(n)
+                    WHERE (n)-[:DEFINES_METHOD|DEFINES_FUNCTION*1..2]-(f)
+                    RETURN [x in nodes(path) | x.id] as cycle, length(path) as len
+                    ORDER BY len ASC
+                    LIMIT 10
+                """, {"repo_id": repo_id})
+            else:
+                # Original query for all repos
+                result = session.run("""
+                    MATCH path = (n:Function)-[:CALLS*1..5]->(n)
+                    RETURN [x in nodes(path) | x.id] as cycle, length(path) as len
+                    ORDER BY len ASC
+                    LIMIT 10
+                """)
             return [record["cycle"] for record in result]
             
     def get_call_graph(self, root_function_name: str, depth: int = 3) -> Dict:
@@ -97,7 +109,7 @@ class Neo4jAdapter:
             logger.error(f"Error fetching call graph: {e}")
             return {}
 
-    def store_analysis(self, analysis: FileAnalysis, repo_id: str, commit_hash: str = "HEAD"):
+    def store_analysis(self, analysis: FileAnalysis, repo_id: str, commit_hash: str = "HEAD", session_id: str = None):
         """Store a single file analysis result into the graph"""
         if not self.driver: 
             return
@@ -112,10 +124,12 @@ class Neo4jAdapter:
                     f.loc = $loc, 
                     f.language = $lang,
                     f.repo_id = $repo_id,
+                    f.session_id = $session_id,
                     f.commit_hash = $commit,
                     f.last_analyzed = timestamp()
             """, {
                 "id": file_id,
+                "session_id": session_id,
                 "path": analysis.file_path,
                 "loc": analysis.loc,
                 "lang": analysis.language,
@@ -130,7 +144,8 @@ class Neo4jAdapter:
                     MERGE (c:Class {id: $id})
                     SET c.name = $name,
                         c.start_line = $start,
-                        c.end_line = $end
+                        c.end_line = $end,
+                        c.session_id = $session_id
                     
                     WITH c
                     MATCH (f:File {id: $file_id})
@@ -140,18 +155,19 @@ class Neo4jAdapter:
                     "name": cls.name, 
                     "start": cls.start_line, 
                     "end": cls.end_line,
-                    "file_id": file_id
+                    "file_id": file_id,
+                    "session_id": session_id
                 })
                 
                 # Methods
                 for method in cls.methods:
                     method_id = f"{class_id}::{method.name}"
-                    self._store_function(session, method, method_id, parent_id=class_id, rel_type="DEFINES_METHOD")
+                    self._store_function(session, method, method_id, parent_id=class_id, rel_type="DEFINES_METHOD", session_id=session_id)
 
             # 3. Store Top-Level Functions
             for func in analysis.functions:
                 func_id = f"{file_id}::{func.name}"
-                self._store_function(session, func, func_id, parent_id=file_id, rel_type="DEFINES_FUNCTION")
+                self._store_function(session, func, func_id, parent_id=file_id, rel_type="DEFINES_FUNCTION", session_id=session_id)
 
             # 4. Store Imports (Phase 2)
             for module_name, resolved_path in analysis.resolved_imports.items():
@@ -239,7 +255,7 @@ class Neo4jAdapter:
 
 
 
-    def _store_function(self, session, func: FunctionInfo, func_id: str, parent_id: str, rel_type: str):
+    def _store_function(self, session, func: FunctionInfo, func_id: str, parent_id: str, rel_type: str, session_id: str = None):
 
         session.run(f"""
             MERGE (fn:Function {{id: $id}})
@@ -247,7 +263,8 @@ class Neo4jAdapter:
                 fn.start_line = $start,
                 fn.end_line = $end,
                 fn.complexity = $complexity,
-                fn.args = $args
+                fn.args = $args,
+                fn.session_id = $session_id
             
             WITH fn
             MATCH (p {{id: $parent_id}})
@@ -259,7 +276,8 @@ class Neo4jAdapter:
             "end": func.end_line,
             "complexity": func.complexity,
             "args": func.args,
-            "parent_id": parent_id
+            "parent_id": parent_id,
+            "session_id": session_id
         })
 
     def auto_tag_layers(self, repo_id: str):

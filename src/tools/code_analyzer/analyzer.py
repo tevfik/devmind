@@ -163,7 +163,12 @@ class CodeAnalyzer:
                     
                     # 3. Store in Neo4j (Nodes + Relationships)
                     if analysis and self.neo4j_adapter:
-                        self.neo4j_adapter.store_analysis(analysis, self.repo_path.name, commit_hash=current_commit)
+                        self.neo4j_adapter.store_analysis(
+                            analysis, 
+                            self.repo_path.name, 
+                            commit_hash=current_commit,
+                            session_id=self.session_id
+                        )
                     
                     # 4. Semantic Analysis (Embeddings)
                     if analysis and use_semantic and self.code_embedder and self.qdrant_adapter:
@@ -225,6 +230,8 @@ class CodeAnalyzer:
                 }
                 # Add metadata
                 payload.update(chunk.metadata)
+                # Add session_id for multi-repo querying
+                payload["session_id"] = self.session_id
                 
                 items_to_embed.append(payload)
             

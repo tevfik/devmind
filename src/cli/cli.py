@@ -124,9 +124,10 @@ Examples:
     docker_parser.set_defaults(func=handle_docker)
     
     # Session command - Manage sessions
+    # ========== SESSION MANAGEMENT (Chat History) ==========
     session_parser = subparsers.add_parser(
         'session',
-        help='Manage DevMind sessions with tags'
+        help='Manage DevMind chat sessions with tags'
     )
     session_subparsers = session_parser.add_subparsers(
         dest='session_action',
@@ -134,30 +135,59 @@ Examples:
     )
     
     # session new [--name NAME] [--tag TAG [TAG ...]]
-    session_new = session_subparsers.add_parser('new', help='Create new session')
+    session_new = session_subparsers.add_parser('new', help='Create new chat session')
     session_new.add_argument('--name', help='Session name')
     session_new.add_argument('--tag', nargs='*', help='Tags for session')
     
     # session list
-    session_subparsers.add_parser('list', help='List all sessions')
+    session_subparsers.add_parser('list', help='List all chat sessions')
     
     # session current
-    session_subparsers.add_parser('current', help='Show active session')
+    session_subparsers.add_parser('current', help='Show active chat session')
     
     # session set <session_id>
-    session_set = session_subparsers.add_parser('set', help='Switch to session')
+    session_set = session_subparsers.add_parser('set', help='Switch to chat session')
     session_set.add_argument('session_id', help='Session ID to switch to')
     
     # session tag <session_id> <tag>
-    session_tag = session_subparsers.add_parser('tag', help='Add tag to session')
+    session_tag = session_subparsers.add_parser('tag', help='Add tag to chat session')
     session_tag.add_argument('session_id', help='Session ID')
     session_tag.add_argument('tag', help='Tag to add')
     
     # session delete <session_id>
-    session_delete = session_subparsers.add_parser('delete', help='Delete session')
+    session_delete = session_subparsers.add_parser('delete', help='Delete chat session')
     session_delete.add_argument('session_id', help='Session ID to delete')
+    session_delete.add_argument('--force', '-f', action='store_true', help='Skip confirmation')
+    
+    # session show <session_id> - Show detailed session information
+    session_show = session_subparsers.add_parser('show', help='Show detailed chat session information')
+    session_show.add_argument('session_id', help='Session ID to show')
     
     session_parser.set_defaults(func=handle_session)
+    
+    # ========== PROJECT MANAGEMENT (Learning Sessions) ==========
+    project_parser = subparsers.add_parser(
+        'project',
+        help='Manage DevMind projects (multi-repo learning)'
+    )
+    project_subparsers = project_parser.add_subparsers(
+        dest='project_action',
+        help='Project action'
+    )
+    
+    # project list
+    project_subparsers.add_parser('list', help='List all learned projects')
+    
+    # project show <project_id>
+    project_show = project_subparsers.add_parser('show', help='Show project details')
+    project_show.add_argument('project_id', help='Project ID to show')
+    
+    # project delete <project_id>
+    project_delete = project_subparsers.add_parser('delete', help='Delete project')
+    project_delete.add_argument('project_id', help='Project ID to delete')
+    project_delete.add_argument('--force', '-f', action='store_true', help='Skip confirmation')
+    
+    project_parser.set_defaults(func=handle_project)
     
     # Status command
     status_parser = subparsers.add_parser(
@@ -173,6 +203,8 @@ Examples:
         'chat',
         help='Start interactive AI chat session'
     )
+    chat_parser.add_argument('--session-id', help='Use specific chat session for conversation history')
+    chat_parser.add_argument('--project-id', help='Limit code context to specific project (learned repo)')
     chat_parser.set_defaults(func=handle_chat)
     
     # Analyze command - Repo analysis
@@ -386,7 +418,7 @@ def handle_docker(args):
 
 
 def handle_session(args):
-    """Handle session management commands"""
+    """Handle chat session management commands (memory/history)"""
     from core.session_manager import get_session_manager
     from rich.table import Table
     
@@ -401,40 +433,38 @@ def handle_session(args):
     if args.session_action == "new":
         tags = args.tag if args.tag else []
         session_id = session_mgr.create_session(name=args.name, tags=tags)
-        print(f"\n✅ Created session: {session_id}")
+        print(f"\n✅ Created chat session: {session_id}")
         if args.name:
             print(f"   Name: {args.name}")
         if tags:
             print(f"   Tags: {', '.join(tags)}")
         print(f"   Active: ✓\n")
     
-    # List sessions
+    # List sessions (memory sessions)
     elif args.session_action == "list":
         sessions = session_mgr.list_sessions()
-        active = session_mgr.get_active_session()
-        
         if not sessions:
-            print("\n❌ No sessions found")
-            print("   Create one: devmind session new\n")
+            print("\n[yellow]No chat sessions found. Create one with:[/yellow]")
+            print("[dim]  devmind session new --name=myproject[/dim]\n")
             return
         
-        table = Table(title="DevMind Sessions", show_header=True, header_style="bold cyan")
-        table.add_column("ID", style="green")
-        table.add_column("Name", style="white")
+        print(f"\n[bold cyan]💬 Chat Sessions[/bold cyan]\n")
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Session ID", style="cyan", no_wrap=True)
+        table.add_column("Name", style="green")
         table.add_column("Tags", style="yellow")
         table.add_column("Created", style="dim")
-        table.add_column("Active", style="bold")
+        
+        from rich.console import Console
+        from rich.table import Table as RichTable
+        console = Console()
         
         for session in sessions:
-            is_active = "✓" if session["id"] == active else ""
-            tags_str = ", ".join(session.get("tags", []))
-            created = session["created_at"][:10]
             table.add_row(
-                session["id"],
-                session["name"],
-                tags_str or "-",
-                created,
-                is_active
+                session['id'][:8],
+                session.get('name', '-'),
+                ', '.join(session.get('tags', [])) or '-',
+                session['created_at'][:10]
             )
         
         console.print(table)
@@ -444,12 +474,12 @@ def handle_session(args):
     elif args.session_action == "current":
         active = session_mgr.get_active_session()
         if not active:
-            print("\n❌ No active session\n")
+            print("\n❌ No active chat session\n")
             return
         
         session = session_mgr.get_session(active)
         if session:
-            print(f"\n🎯 Active Session:")
+            print(f"\n🎯 Active Chat Session:")
             print(f"   ID: {session['id']}")
             print(f"   Name: {session['name']}")
             print(f"   Tags: {', '.join(session.get('tags', [])) or '-'}")
@@ -460,23 +490,63 @@ def handle_session(args):
     elif args.session_action == "set":
         if session_mgr.set_active_session(args.session_id):
             session = session_mgr.get_session(args.session_id)
-            print(f"\n✅ Switched to session: {session['name']}")
+            print(f"\n✅ Switched to chat session: {session['name']}")
             print(f"   ID: {args.session_id}\n")
         else:
-            print(f"\n❌ Session not found: {args.session_id}\n")
+            print(f"\n❌ Chat session not found: {args.session_id}\n")
     
     # Add tag
     elif args.session_action == "tag":
         if session_mgr.add_tag(args.session_id, args.tag):
             session = session_mgr.get_session(args.session_id)
-            print(f"\n✅ Added tag '{args.tag}' to session: {session['name']}")
+            print(f"\n✅ Added tag '{args.tag}' to chat session: {session['name']}")
             print(f"   Tags: {', '.join(session.get('tags', []))}\n")
         else:
-            print(f"\n❌ Session not found: {args.session_id}\n")
+            print(f"\n❌ Chat session not found: {args.session_id}\n")
     
     # Delete session
     elif args.session_action == "delete":
         session = session_mgr.get_session(args.session_id)
+        if not session:
+            print(f"\n❌ Chat session not found: {args.session_id}\n")
+            return
+        
+        session_mgr.delete_session(args.session_id)
+        print(f"\n✅ Deleted chat session: {session['name']}\n")
+    
+    # Show detailed session info
+    elif args.session_action == "show":
+        session = session_mgr.get_session(args.session_id)
+        if not session:
+            print(f"\n❌ Chat session not found: {args.session_id}\n")
+            return
+        
+        print(f"\n[bold cyan]💬 Chat Session Details: {args.session_id}[/bold cyan]\n")
+        print(f"[bold]ID:[/bold] {session['id']}")
+        print(f"[bold]Name:[/bold] {session['name']}")
+        print(f"[bold]Tags:[/bold] {', '.join(session.get('tags', [])) or '-'}")
+        print(f"[bold]Created:[/bold] {session['created_at']}")
+        print(f"[bold]Last used:[/bold] {session['last_used']}\n")
+
+
+def handle_project(args):
+    """Handle project management commands (learning sessions)"""
+    if not args.project_action:
+        print("❌ Error: Please specify a project action")
+        print("   Try: devmind project --help")
+        return
+    
+    # List projects
+    if args.project_action == "list":
+        handle_project_list(args)
+    
+    # Show project details
+    elif args.project_action == "show":
+        handle_project_show(args)
+    
+    # Delete project
+    elif args.project_action == "delete":
+        handle_project_delete(args)
         if not session:
             print(f"\n❌ Session not found: {args.session_id}\n")
             return
@@ -506,7 +576,18 @@ def handle_status(args):
 
 def handle_chat(args):
     """Handle interactive AI chat"""
-    print("\n🤖 DevMind AI Chat (Type 'exit' to quit)\n")
+    project_id = getattr(args, 'project_id', None)
+    session_id = getattr(args, 'session_id', None)
+    
+    if project_id and session_id:
+        print(f"\n🤖 DevMind AI Chat - Project: {project_id}, Session: {session_id}")
+    elif project_id:
+        print(f"\n🤖 DevMind AI Chat - Project: {project_id}")
+    elif session_id:
+        print(f"\n🤖 DevMind AI Chat - Session: {session_id}")
+    else:
+        print("\n🤖 DevMind AI Chat (Type 'exit' to quit)")
+    
     print("💡 Tip: Ask anything about your code, get AI assistance\n")
     
     agent = None
@@ -514,8 +595,11 @@ def handle_chat(args):
         from agents.agent_chat import ChatAgent
         import uuid
         
-        session_id = f"chat_{uuid.uuid4().hex[:8]}"
-        agent = ChatAgent(session_id=session_id)
+        chat_session_id = f"chat_{uuid.uuid4().hex[:8]}"
+        agent = ChatAgent(
+            session_id=chat_session_id,
+            project_id=project_id
+        )
         
         while True:
             try:
@@ -828,18 +912,49 @@ def handle_learn(args):
         
         # Show statistics
         if analyzer.neo4j_adapter:
-            console.print("[bold]📈 Graph Statistics:[/bold]")
+            console.print(f"[bold]📈 Graph Statistics for {repo_path.name}:[/bold]")
             
-            # Query node counts
-            with analyzer.neo4j_adapter.driver.session() as session:
-                result = session.run("MATCH (n) RETURN labels(n)[0] as type, count(n) as count")
+            # Query node counts for this repo only
+            repo_id = repo_path.name
+            with analyzer.neo4j_adapter.driver.session() as db_session:
+                result = db_session.run("""
+                    MATCH (n)
+                    WHERE n.repo_id = $repo_id
+                    RETURN labels(n)[0] as type, count(n) as count
+                    ORDER BY type
+                """, {"repo_id": repo_id})
                 for record in result:
                     node_type = record["type"] or "Unknown"
                     count = record["count"]
                     console.print(f"   • {node_type}: {count}")
             
-            # Check for circular dependencies
-            cycles = analyzer.neo4j_adapter.detect_circular_dependencies()
+            # Show session-level statistics if multiple repos in session
+            with analyzer.neo4j_adapter.driver.session() as db_session:
+                session_repos = db_session.run("""
+                    MATCH (n {session_id: $session_id})
+                    RETURN DISTINCT n.repo_id as repo_id
+                """, {"session_id": session_id}).values()
+                
+                if len(session_repos) > 1:
+                    console.print(f"\n[bold cyan]📦 Session '{session_id}' includes {len(session_repos)} repositories:[/bold cyan]")
+                    for repo in session_repos:
+                        if repo[0]:
+                            console.print(f"   • {repo[0]}")
+                    
+                    # Total session stats
+                    result = db_session.run("""
+                        MATCH (n {session_id: $session_id})
+                        RETURN labels(n)[0] as type, count(n) as count
+                        ORDER BY type
+                    """, {"session_id": session_id})
+                    console.print(f"\n[dim]   Total across session:[/dim]")
+                    for record in result:
+                        node_type = record["type"] or "Unknown"
+                        count = record["count"]
+                        console.print(f"   [dim]• {node_type}: {count}[/dim]")
+            
+            # Check for circular dependencies (repo-specific)
+            cycles = analyzer.neo4j_adapter.detect_circular_dependencies(repo_id=repo_id)
             if cycles:
                 console.print(f"\n[bold yellow]⚠️  Found {len(cycles)} Circular Dependencies[/bold yellow]")
                 for cycle in cycles[:5]:  # Show first 5
@@ -1683,6 +1798,225 @@ def create_basic_project(path: Path, name: str):
     (path / ".gitignore").write_text("__pycache__/\n*.pyc\n")
     
     print(f"   ✓ Created basic project structure")
+
+
+def handle_project_list(args):
+    """List all learned projects"""
+    from rich.console import Console
+    from rich.table import Table
+    import os
+    
+    console = Console()
+    
+    # Neo4j Config
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+    
+    try:
+        from tools.code_analyzer.neo4j_adapter import Neo4jAdapter
+        adapter = Neo4jAdapter(neo4j_uri, (neo4j_user, neo4j_password))
+        
+        console.print("\n[bold cyan]📚 Learned Projects[/bold cyan]\n")
+        
+        with adapter.driver.session() as db_session:
+            # Get all projects with their repositories
+            result = db_session.run("""
+                MATCH (n)
+                WHERE n.session_id IS NOT NULL
+                WITH n.session_id as project_id, collect(DISTINCT n.repo_id) as repos, 
+                     max(n.last_analyzed) as last_used
+                RETURN project_id, repos, last_used
+                ORDER BY last_used DESC
+            """)
+            
+            projects = list(result)
+            
+            if not projects:
+                console.print("[yellow]No projects found. Create one with:[/yellow]")
+                console.print("[dim]  devmind learn <path> --session-id=<name>[/dim]\n")
+                return
+            
+            table = Table(show_header=True, header_style="bold magenta")
+            table.add_column("Project ID", style="cyan", no_wrap=True)
+            table.add_column("Repositories", style="green")
+            table.add_column("Last Used", style="dim")
+            
+            for record in projects:
+                project_id = record["project_id"]
+                repos = [r for r in record["repos"] if r]  # Filter out None
+                last_used = record["last_used"]
+                
+                # Format timestamp
+                if last_used:
+                    from datetime import datetime
+                    last_used_dt = datetime.fromtimestamp(last_used / 1000)  # Neo4j timestamp is in milliseconds
+                    last_used_str = last_used_dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    last_used_str = "Unknown"
+                
+                repos_str = ", ".join(repos) if repos else "No repos"
+                
+                table.add_row(project_id, repos_str, last_used_str)
+            
+            console.print(table)
+            console.print(f"\n[dim]💡 Use 'devmind project show <project-id>' for details[/dim]\n")
+        
+        adapter.close()
+        
+    except Exception as e:
+        console.print(f"\n[bold red]❌ Error:[/bold red] {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def handle_project_show(args):
+    """Show detailed information about a project"""
+    from rich.console import Console
+    from rich.table import Table
+    import os
+    
+    console = Console()
+    project_id = args.project_id
+    
+    # Neo4j Config
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+    
+    try:
+        from tools.code_analyzer.neo4j_adapter import Neo4jAdapter
+        adapter = Neo4jAdapter(neo4j_uri, (neo4j_user, neo4j_password))
+        
+        console.print(f"\n[bold cyan]📋 Project Details: {project_id}[/bold cyan]\n")
+        
+        with adapter.driver.session() as db_session:
+            # Get repositories in this project
+            repos_result = db_session.run("""
+                MATCH (n {session_id: $project_id})
+                RETURN DISTINCT n.repo_id as repo_id
+                ORDER BY repo_id
+            """, {"project_id": project_id})
+            
+            repos = [r["repo_id"] for r in repos_result if r["repo_id"]]
+            
+            if not repos:
+                console.print(f"[yellow]Project '{project_id}' not found or has no data.[/yellow]\n")
+                return
+            
+            console.print(f"[bold]Repositories ({len(repos)}):[/bold]")
+            for repo in repos:
+                console.print(f"  • {repo}")
+            
+            console.print(f"\n[bold]Statistics:[/bold]")
+            
+            # Get node counts by type for this project
+            stats_result = db_session.run("""
+                MATCH (n {session_id: $project_id})
+                RETURN labels(n)[0] as type, count(n) as count
+                ORDER BY type
+            """, {"project_id": project_id})
+            
+            for record in stats_result:
+                node_type = record["type"] or "Unknown"
+                count = record["count"]
+                console.print(f"  • {node_type}: {count}")
+            
+            # Per-repository breakdown
+            console.print(f"\n[bold]Per-Repository Breakdown:[/bold]")
+            
+            table = Table(show_header=True, header_style="bold magenta")
+            table.add_column("Repository", style="cyan")
+            table.add_column("Functions", justify="right", style="green")
+            table.add_column("Classes", justify="right", style="blue")
+            table.add_column("Files", justify="right", style="yellow")
+            
+            for repo in repos:
+                counts_result = db_session.run("""
+                    MATCH (n {session_id: $project_id, repo_id: $repo_id})
+                    RETURN labels(n)[0] as type, count(n) as count
+                """, {"project_id": project_id, "repo_id": repo})
+                
+                counts = {r["type"]: r["count"] for r in counts_result}
+                
+                table.add_row(
+                    repo,
+                    str(counts.get("Function", 0)),
+                    str(counts.get("Class", 0)),
+                    str(counts.get("File", 0))
+                )
+            
+            console.print(table)
+            console.print()
+        
+        adapter.close()
+        
+    except Exception as e:
+        console.print(f"\n[bold red]❌ Error:[/bold red] {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def handle_project_delete(args):
+    """Delete a project and all its learned data"""
+    from rich.console import Console
+    from rich.prompt import Confirm
+    import os
+    
+    console = Console()
+    project_id = args.project_id
+    
+    # Confirmation
+    if not args.force:
+        confirmed = Confirm.ask(
+            f"[yellow]⚠️  Delete project '{project_id}' and all its learned data?[/yellow]",
+            default=False
+        )
+        if not confirmed:
+            console.print("[dim]Cancelled.[/dim]")
+            return
+    
+    # Neo4j Config
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+    
+    try:
+        from tools.code_analyzer.neo4j_adapter import Neo4jAdapter
+        adapter = Neo4jAdapter(neo4j_uri, (neo4j_user, neo4j_password))
+        
+        with adapter.driver.session() as db_session:
+            # Count nodes to be deleted
+            count_result = db_session.run("""
+                MATCH (n {session_id: $project_id})
+                RETURN count(n) as count
+            """, {"project_id": project_id})
+            
+            node_count = count_result.single()["count"]
+            
+            if node_count == 0:
+                console.print(f"[yellow]Project '{project_id}' not found or already empty.[/yellow]\n")
+                return
+            
+            # Delete all nodes and relationships for this project
+            db_session.run("""
+                MATCH (n {session_id: $project_id})
+                DETACH DELETE n
+            """, {"project_id": project_id})
+            
+            console.print(f"\n[bold green]✅ Deleted project '{project_id}'[/bold green]")
+            console.print(f"[dim]   Removed {node_count} nodes from Neo4j[/dim]")
+        
+        adapter.close()
+        
+        # Note: Qdrant embeddings deletion would need to be added here
+        console.print(f"\n[dim]💡 Note: Qdrant embeddings for this project remain. ")
+        console.print(f"   Use Qdrant console to delete if needed.[/dim]\n")
+        
+    except Exception as e:
+        console.print(f"\n[bold red]❌ Error:[/bold red] {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
