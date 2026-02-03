@@ -42,7 +42,21 @@ class Neo4jAdapter:
                 except Exception as e:
                     logger.warning(f"Schema init warning: {e}")
 
-    def store_analysis(self, analysis: FileAnalysis, repo_id: str):
+    def detect_circular_dependencies(self):
+        """Find circular function calls in the graph"""
+        if not self.driver:
+            return []
+            
+        with self.driver.session() as session:
+            result = session.run("""
+                MATCH path = (n:Function)-[:CALLS*1..5]->(n)
+                RETURN [x in nodes(path) | x.id] as cycle, length(path) as len
+                ORDER BY len ASC
+                LIMIT 10
+            """)
+            return [record["cycle"] for record in result]
+            
+    def store_analysis(self, analysis: FileAnalysis, repo_id: str, commit_hash: str = "HEAD"):
         """Store a single file analysis result into the graph"""
         if not self.driver: 
             return
@@ -57,13 +71,15 @@ class Neo4jAdapter:
                     f.loc = $loc, 
                     f.language = $lang,
                     f.repo_id = $repo_id,
+                    f.commit_hash = $commit,
                     f.last_analyzed = timestamp()
             """, {
                 "id": file_id,
                 "path": analysis.file_path,
                 "loc": analysis.loc,
                 "lang": analysis.language,
-                "repo_id": repo_id
+                "repo_id": repo_id,
+                "commit": commit_hash
             })
             
             # 2. Store Classes

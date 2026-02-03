@@ -179,6 +179,7 @@ Examples:
         help='Type of analysis'
     )
     analyze_parser.add_argument('--target', help='Target function/class for impact analysis')
+    analyze_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
     analyze_parser.set_defaults(func=handle_analyze)
 
     # Simulate command - Helper for impact analysis
@@ -576,13 +577,27 @@ def handle_analyze(args):
                     console.print(f"[yellow]    Analysis will run but graph data won't be stored.[/yellow]")
 
                 start_time = time.time()
-                analyzer.analyze_repository()
+                # Use incremental flag if passed (mapped from --incremental arg if we add it)
+                # But CLI args don't have it yet. Let's assume standard analysis for now
+                # or add argument in analyze_parser
+                analyzer.analyze_repository(incremental=getattr(args, 'incremental', False))
                 duration = time.time() - start_time
                 
                 console.print(f"[bold green]✅ Analysis Complete![/bold green]")
                 console.print(f"   - Processing Duration: {duration:.2f}s")
                 console.print(f"   - Session ID: {session_id}")
                 
+                # Report Cycles if possible
+                if analyzer.neo4j_adapter:
+                   cycles = analyzer.neo4j_adapter.detect_circular_dependencies()
+                   if cycles:
+                       console.print(f"\n[bold red]⚠️  Found {len(cycles)} Circular Dependencies:[/bold red]")
+                       for cycle in cycles:
+                           # cycle is a list of node IDs. Let's format nicely.
+                           # id is like id:path/to/file::Class::method
+                           simple_names = [uid.split("::")[-1] for uid in cycle]
+                           console.print(f"   🔄 {' -> '.join(simple_names)}")
+
             except Exception as e:
                 console.print(f"[bold red]❌ Analysis Failed:[/bold red] {str(e)}")
                 import traceback

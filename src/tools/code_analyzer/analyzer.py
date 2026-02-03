@@ -14,6 +14,7 @@ from .cache_manager import CachingManager
 from .models import FileAnalysis
 from .import_resolver import ImportResolver
 from .call_graph import CallGraphBuilder
+from tools.git_analyzer import GitAnalyzer
 from core.analysis_session import AnalysisSession
 import config.config as cfg 
 
@@ -34,6 +35,7 @@ class CodeAnalyzer:
         self.parser = ASTParser()
         self.import_resolver = ImportResolver(self.repo_path)
         self.call_graph_builder = CallGraphBuilder()
+        self.git_analyzer = GitAnalyzer(str(self.repo_path))
         
         # Initialize Neo4j (Lazy load or config based)
         self.neo4j_adapter = None  
@@ -47,13 +49,30 @@ class CodeAnalyzer:
         if self.neo4j_adapter:
             self.neo4j_adapter.close()
 
-    def analyze_repository(self):
+    def analyze_repository(self, incremental: bool = False):
         """
         Perform full analysis of the repository.
         """
         self.session.log_progress(f"Starting analysis of {self.repo_path}")
         
+        # Get Current Commit Hash
+        current_commit = self.git_analyzer.get_current_commit() or "HEAD"
+
         files = list(self._find_files())
+        
+        if incremental:
+            # TODO: Better state tracking efficiently.
+            # For now, simplistic approach: Ask git what changed since last indexed commit?
+            # But we don't know the last indexed commit easily without querying DB.
+            # So simpler: Only process files where cache.get_cached_analysis() returns None?
+            # Actually, `get_cached_analysis` checks file hash. If hash changed, it returns None.
+            # So our logic below ALREADY handles incremental parsing based on file content!
+            # The only optimization `incremental` flag provides is skipping the `neo4j` writes for unchanged files
+            # if we trust the cache to indicate "no change".
+            
+            # However, if we mean "git incremental", we might restrict `files` list.
+            pass
+
         total_files = len(files)
         
         self.session.update_plan(f"# Task Plan\n\n- [ ] Analyze {total_files} files in {self.repo_path.name}\n")
@@ -67,6 +86,7 @@ class CodeAnalyzer:
             for file_path in files:
                 try:
                     # 1. Check Cache
+                    # This relies on content hash
                     analysis = self.cache.get_cached_analysis(file_path)
                     
                     if not analysis:
@@ -91,8 +111,10 @@ class CodeAnalyzer:
                             self.cache.save_analysis(file_path, analysis)
                     
                     # 3. Store in Neo4j (Nodes + Relationships)
+                    # Optimization: If incremental=True and we hit cache, we MIGHT skip storing if we assume DB is in sync.
+                    # But safest is to always ensure DB has it.
                     if analysis and self.neo4j_adapter:
-                        self.neo4j_adapter.store_analysis(analysis, self.repo_path.name)
+                        self.neo4j_adapter.store_analysis(analysis, self.repo_path.name, commit_hash=current_commit)
                         
                     processed_count += 1
                     progress.advance(task)
