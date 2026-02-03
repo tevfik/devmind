@@ -747,6 +747,13 @@ def handle_simulate(args):
         # TODO: Use args.file to filter more precisely if needed
         report = impact_analyzer.analyze_function_change(args.function, change_type="signature")
         
+        # Log to findings.md using current session
+        analyzer.session.log_finding(
+            title=f"Impact Simulation: {args.function}",
+            description=f"Risk Score: {report['risk_score']}\nReasoning: {report['reasoning']}\nAffected files: {report['affected_files']}",
+            severity="HIGH" if report['risk_score'] > 70 else ("MEDIUM" if report['risk_score'] > 30 else "LOW")
+        )
+        
         # Display Results
         risk_color = "green"
         if report['risk_score'] > 30: risk_color = "yellow"

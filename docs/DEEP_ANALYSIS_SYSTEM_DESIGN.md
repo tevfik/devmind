@@ -599,7 +599,7 @@ tests/
 
 - [x] **Impact Analysis & Simulation**
     - [x] Implement `ImpactAnalyzer` algorithm.
-    - [ ] **[STATE]** Log risk findings to `findings.md`.
+    - [x] **[STATE]** Log risk findings to `findings.md`.
     - [x] Add `devmind simulate "change signature of X"` command.
 
 ### 🧠 Phase 3: Semantic Understanding & RAG [Week 3]
