@@ -218,12 +218,12 @@ Examples:
     chat_parser.add_argument('--project-id', help='Limit code context to specific project (learned repo)')
     chat_parser.set_defaults(func=handle_chat)
     
-    # Analyze command - Repo analysis
+    # Analyze command - Repo analysis + Deep learning
     analyze_parser = subparsers.add_parser(
         'analyze',
-        help='Analyze a git repository'
+        help='Analyze repository (overview/deep learning with AST + embeddings)'
     )
-    analyze_parser.add_argument('path', help='Path to repository')
+    analyze_parser.add_argument('path', nargs='?', default='.', help='Path to repository (default: current dir)')
     analyze_parser.add_argument(
         '--type',
         choices=['overview', 'structure', 'impact', 'detailed', 'deep'],
@@ -232,18 +232,62 @@ Examples:
     )
     analyze_parser.add_argument('--target', help='Target function/class for impact analysis')
     analyze_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
-    analyze_parser.add_argument('--project-id', help='Associate analysis with a specific project ID')
+    analyze_parser.add_argument('--project-id', help='Project ID for storage (deep mode)')
     analyze_parser.set_defaults(func=handle_analyze)
     
-    # Learn command - Deep repository learning (Neo4j + Qdrant)
+    # Learn command - Deprecated, now alias to analyze --type deep
     learn_parser = subparsers.add_parser(
         'learn',
-        help='Deep learn a repository (AST, call graphs, embeddings)'
+        help='[DEPRECATED] Use: devmind analyze --type deep'
     )
     learn_parser.add_argument('path', nargs='?', default='.', help='Path to repository (default: current dir)')
     learn_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
     learn_parser.add_argument('--project-id', help='Custom project ID (default: auto-generated)')
-    learn_parser.set_defaults(func=handle_learn)
+    learn_parser.set_defaults(func=handle_learn_deprecated)
+
+    # Agent command - Autonomous code quality agent
+    agent_parser = subparsers.add_parser(
+        'agent',
+        help='Autonomous AI agent for code quality analysis'
+    )
+    agent_subparsers = agent_parser.add_subparsers(dest='agent_command', help='Agent subcommands')
+    
+    # Agent analyze subcommand
+    agent_analyze_parser = agent_subparsers.add_parser(
+        'analyze',
+        help='Run autonomous analysis on a project'
+    )
+    agent_analyze_parser.add_argument('project_id', help='Project ID (learned repository)')
+    agent_analyze_parser.add_argument('--format', choices=['table', 'json', 'chat'], default='table', help='Output format')
+    agent_analyze_parser.set_defaults(func=handle_agent_analyze)
+    
+    # Agent status subcommand
+    agent_status_parser = agent_subparsers.add_parser(
+        'status',
+        help='Show agent learning state'
+    )
+    agent_status_parser.add_argument('project_id', help='Project ID')
+    agent_status_parser.set_defaults(func=handle_agent_status)
+    
+    # Agent history subcommand
+    agent_history_parser = agent_subparsers.add_parser(
+        'history',
+        help='Show decision history and trends'
+    )
+    agent_history_parser.add_argument('project_id', help='Project ID')
+    agent_history_parser.add_argument('--limit', type=int, default=10, help='Number of recent decisions to show')
+    agent_history_parser.set_defaults(func=handle_agent_history)
+    
+    # Agent feedback subcommand
+    agent_feedback_parser = agent_subparsers.add_parser(
+        'feedback',
+        help='Send feedback on recommendations'
+    )
+    agent_feedback_parser.add_argument('project_id', help='Project ID')
+    agent_feedback_parser.add_argument('rec_id', help='Recommendation ID')
+    agent_feedback_parser.add_argument('--status', choices=['approve', 'reject', 'ignore'], required=True, help='Feedback status')
+    agent_feedback_parser.add_argument('--note', help='Optional note for feedback')
+    agent_feedback_parser.set_defaults(func=handle_agent_feedback)
 
     # Simulate command - Helper for impact analysis
     simulate_parser = subparsers.add_parser(
@@ -853,8 +897,28 @@ def handle_analyze(args):
         print(f"❌ Analysis failed: {e}")
 
 
+def handle_learn_deprecated(args):
+    """Handle deprecated 'learn' command - redirect to analyze --type deep"""
+    from rich.console import Console
+    
+    console = Console()
+    console.print("\n[yellow]⚠️  WARNING: 'devmind learn' is deprecated![/yellow]")
+    console.print("[yellow]   Use 'devmind analyze --type deep' instead[/yellow]\n")
+    
+    # Convert old args to new args format
+    class NewArgs:
+        path = args.path
+        type = 'deep'
+        target = None
+        incremental = args.incremental
+        project_id = args.project_id
+    
+    # Call the new unified handler
+    return handle_analyze(NewArgs())
+
+
 def handle_learn(args):
-    """Handle deep repository learning"""
+    """Handle deep repository learning (original implementation kept for compatibility)"""
     from rich.console import Console
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
     from tools.code_analyzer.analyzer import CodeAnalyzer
@@ -2203,6 +2267,244 @@ def handle_project_cleanup(args):
         traceback.print_exc()
 
 
+# ========== AGENT HANDLERS ==========
+
+def handle_agent_analyze(args):
+    """Handle autonomous agent analysis"""
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+    from pathlib import Path
+    import os
+    
+    console = Console()
+    
+    try:
+        from agents.code_quality_agent import CodeQualityAgent
+        from tools.metrics import MetricsAnalyzer
+        
+        console.print(f"\n[bold cyan]🤖 AUTONOMOUS AGENT ANALYSIS[/bold cyan]")
+        console.print(f"[dim]Project: {args.project_id}[/dim]\n")
+        
+        # Find project path
+        project_root = Path(os.path.expanduser("~/.devmind/projects")) / args.project_id
+        if not project_root.exists():
+            console.print(f"[bold red]❌ Error:[/bold red] Project '{args.project_id}' not found")
+            console.print(f"[dim]   Try: devmind learn <repo> --project-id {args.project_id}[/dim]\n")
+            return
+        
+        # Get original repo path from project metadata (if available)
+        # For now, we'll use the project root itself
+        repo_path = project_root
+        
+        # Initialize agent
+        agent = CodeQualityAgent(args.project_id, repo_path)
+        
+        # Run analysis
+        console.print(f"[dim]Observing changes and analyzing code...[/dim]")
+        report = agent.analyze_repository()
+        
+        if not report:
+            console.print(f"[yellow]No issues detected or analysis skipped.[/yellow]\n")
+            return
+        
+        # Format output
+        if args.format == 'json':
+            import json
+            console.print(json.dumps(report, indent=2))
+        
+        elif args.format == 'chat':
+            # Friendly chat-like format
+            console.print(f"\n[bold green]Analysis Results[/bold green]")
+            
+            issues = report.get('issues', [])
+            if issues:
+                console.print(f"\n[cyan]Found {len(issues)} issues:[/cyan]\n")
+                for i, issue in enumerate(issues, 1):
+                    priority = issue.get('priority', 5)
+                    effort = issue.get('effort_hours', 0)
+                    risk = issue.get('risk_level', 'unknown')
+                    
+                    icon = "🔴" if priority >= 8 else "🟠" if priority >= 5 else "🟡"
+                    console.print(f"{icon} [{i}] {issue.get('type', 'Unknown')}")
+                    console.print(f"    {issue.get('description', '')}")
+                    console.print(f"    Priority: {priority}/10 | Effort: ~{effort}h | Risk: {risk}\n")
+        
+        else:  # table format (default)
+            issues = report.get('issues', [])
+            if not issues:
+                console.print(f"[green]✅ No issues detected![/green]\n")
+                return
+            
+            table = Table(title="Code Quality Issues", show_header=True, header_style="bold cyan")
+            table.add_column("Priority", style="red", width=8)
+            table.add_column("Type", style="cyan", width=15)
+            table.add_column("Description", style="white")
+            table.add_column("Effort", style="yellow", width=8)
+            table.add_column("Risk", style="magenta", width=8)
+            
+            for issue in issues:
+                priority = issue.get('priority', 5)
+                priority_str = f"{priority}/10"
+                issue_type = issue.get('type', 'Unknown')
+                desc = issue.get('description', '')[:50]
+                effort = f"{issue.get('effort_hours', 0)}h"
+                risk = issue.get('risk_level', '?')
+                
+                table.add_row(priority_str, issue_type, desc, effort, risk)
+            
+            console.print(table)
+        
+        console.print(f"\n[dim]💡 Use 'devmind agent feedback <id> --status approve' to approve recommendations[/dim]\n")
+        
+    except ImportError as e:
+        console.print(f"[bold red]❌ Agent not available:[/bold red] {e}\n")
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}\n")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+
+def handle_agent_status(args):
+    """Show agent learning state"""
+    from rich.console import Console
+    from rich.panel import Panel
+    from pathlib import Path
+    import os
+    import json
+    
+    console = Console()
+    
+    try:
+        agent_state_path = Path(os.path.expanduser("~/.devmind/projects")) / args.project_id / "agent" / "state.json"
+        
+        if not agent_state_path.exists():
+            console.print(f"\n[yellow]No agent state found for project '{args.project_id}'[/yellow]")
+            console.print(f"[dim]   Try: devmind agent analyze {args.project_id}[/dim]\n")
+            return
+        
+        with open(agent_state_path) as f:
+            state = json.load(f)
+        
+        console.print(f"\n[bold cyan]🤖 AGENT STATE: {args.project_id}[/bold cyan]\n")
+        
+        approved = len(state.get('user_feedback', {}).get('approved', []))
+        rejected = len(state.get('user_feedback', {}).get('rejected', []))
+        
+        info = f"""
+[bold]Learning Progress:[/bold]
+  • Decisions made: {len(state.get('decision_history', []))}
+  • Recommendations approved: {approved}
+  • Recommendations rejected: {rejected}
+  • Last analysis: {state.get('last_analysis_timestamp', 'Never')}
+
+[bold]Learned Preferences:[/bold]
+"""
+        for pref, value in state.get('learned_preferences', {}).items():
+            info += f"  • {pref}: {value}\n"
+        
+        console.print(Panel(info, title="Agent State", border_style="cyan"))
+        
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}\n")
+
+
+def handle_agent_history(args):
+    """Show decision history and trends"""
+    from rich.console import Console
+    from rich.table import Table
+    from pathlib import Path
+    import os
+    import json
+    
+    console = Console()
+    
+    try:
+        agent_state_path = Path(os.path.expanduser("~/.devmind/projects")) / args.project_id / "agent" / "state.json"
+        
+        if not agent_state_path.exists():
+            console.print(f"\n[yellow]No history found for project '{args.project_id}'[/yellow]\n")
+            return
+        
+        with open(agent_state_path) as f:
+            state = json.load(f)
+        
+        history = state.get('decision_history', [])
+        if not history:
+            console.print(f"\n[dim]No decision history yet.[/dim]\n")
+            return
+        
+        console.print(f"\n[bold cyan]📊 DECISION HISTORY: {args.project_id}[/bold cyan]\n")
+        
+        table = Table(title="Recent Decisions", show_header=True, header_style="bold cyan")
+        table.add_column("Timestamp", style="dim", width=20)
+        table.add_column("Issue Type", style="cyan")
+        table.add_column("Action", style="green")
+        table.add_column("Priority", style="red", width=8)
+        
+        for entry in history[-args.limit:]:
+            timestamp = entry.get('timestamp', 'unknown')[:10]
+            issue_type = entry.get('issue_type', 'Unknown')
+            action = entry.get('action', 'none')
+            priority = entry.get('priority', 5)
+            
+            table.add_row(timestamp, issue_type, action, f"{priority}/10")
+        
+        console.print(table)
+        console.print(f"\n[dim]Showing last {args.limit} decisions[/dim]\n")
+        
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}\n")
+
+
+def handle_agent_feedback(args):
+    """Record user feedback on recommendations"""
+    from rich.console import Console
+    from pathlib import Path
+    import os
+    import json
+    
+    console = Console()
+    
+    try:
+        agent_state_path = Path(os.path.expanduser("~/.devmind/projects")) / args.project_id / "agent" / "state.json"
+        
+        if not agent_state_path.exists():
+            console.print(f"\n[bold red]❌ Error:[/bold red] Project state not found\n")
+            return
+        
+        with open(agent_state_path) as f:
+            state = json.load(f)
+        
+        # Record feedback
+        feedback_category = args.status  # approve/reject/ignore
+        if 'user_feedback' not in state:
+            state['user_feedback'] = {'approved': [], 'rejected': [], 'ignored': []}
+        
+        if feedback_category not in state['user_feedback']:
+            state['user_feedback'][feedback_category] = []
+        
+        feedback_entry = {
+            'rec_id': args.rec_id,
+            'status': args.status,
+            'note': args.note or '',
+            'timestamp': __import__('datetime').datetime.now().isoformat()
+        }
+        
+        state['user_feedback'][feedback_category].append(feedback_entry)
+        
+        # Save updated state
+        with open(agent_state_path, 'w') as f:
+            json.dump(state, f, indent=2)
+        
+        console.print(f"\n[bold green]✅ Feedback recorded[/bold green]")
+        console.print(f"[dim]   Recommendation {args.rec_id}: {args.status}[/dim]")
+        if args.note:
+            console.print(f"[dim]   Note: {args.note}[/dim]")
+        console.print()
+        
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {e}\n")
 
 
 if __name__ == "__main__":
