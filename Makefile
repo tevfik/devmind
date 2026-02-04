@@ -33,19 +33,16 @@ install-dev:
 	@echo "✅ Development installation complete!"
 
 test:
-	@echo "🧪 Running CLI test suite..."
-	@python3 test_cli.py
+	@echo "🧪 Running unit tests..."
+	@pytest tests/unit
 
-test-verbose:
-	@echo "🧪 Running CLI tests (verbose)..."
-	@python3 test_cli.py -v
+test-integration:
+	@echo "🔗 Running integration tests..."
+	@pytest tests/integration
 
-test-modules:
-	@echo "🔬 Running comprehensive module tests..."
-	@python3 test_modules.py
-
-test-all: test test-modules
-	@echo "✅ All tests completed!"
+test-all:
+	@echo "🔬 Running all tests..."
+	@pytest tests/
 
 docker-start:
 	@yaver docker start
