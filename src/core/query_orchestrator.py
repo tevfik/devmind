@@ -323,9 +323,13 @@ class AnalyticsQueryExecutor:
     def get_code_quality_insights(self) -> Dict:
         """Get comprehensive code quality report."""
         if not self.provider:
+            # Fallback if provider is not initialized (e.g. if graph not loaded)
             return {"error": "Code intelligence provider not initialized"}
-
+        
+        # New: Use the enhanced provider to request full analysis
+        # which now includes complexity and coupling from Neo4j/ImpactAnalyzer
         report = self.provider.get_code_quality_report()
+        
         return {
             "type": "code_quality",
             "timestamp": datetime.now().isoformat(),
@@ -336,7 +340,9 @@ class AnalyticsQueryExecutor:
                 "by_severity": report["issues_by_severity"],
             },
             "recommendations": report["recommendations"],
-            "critical_functions": report["critical_functions"][:5],
+            "critical_functions": report["critical_functions"][:10], # Top 10
+            "coupling": report.get("coupling", []),             # New: Coupling Data
+            "top_complexity": report.get("top_complexity", [])  # New: Complexity Data
         }
 
     def analyze_function(self, function_id: str) -> Dict:

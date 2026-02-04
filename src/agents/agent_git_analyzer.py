@@ -20,16 +20,17 @@ from bandit.core import manager as bandit_manager
 from bandit.core import config as bandit_config
 
 # Import local Parser for AST extraction
-from yaver_cli.tools.git_analysis import GraphIndexer, CodeParser
+from tools.git_analysis import GraphIndexer, CodeParser
 
-from yaver_cli.agent_base import (
+from agents.agent_base import (
     YaverState, RepositoryInfo, FileAnalysis, ArchitectureAnalysis,
     logger, print_section_header, print_success, print_error, print_warning,
     create_llm, format_log_entry
 )
-from yaver_cli.config import get_config
-from yaver_cli.agent_graph import GraphManager
-from yaver_cli.agent_memory import get_memory_manager, MemoryType
+from config.config import get_config
+from agents.agent_graph import GraphManager
+from agents.agent_memory import get_memory_manager, MemoryType
+from utils.prompts import ARCHITECTURE_JSON_PROMPT
 
 
 # ============================================================================
@@ -420,30 +421,10 @@ def analyze_architecture(repo_path: Path, file_analyses: List[FileAnalysis], cod
     # 2. Call LLM for Insights
     llm = create_llm("general")
     
-    prompt = f"""
-    You are a Senior Software Architect and Code Analyst.
-    Analyze the provided project statistics and file list to determine the architecture and health of the project.
-    
-    Project Context:
-    {summary}
-    
-    User Focus/Request: {user_request}
-    
-    If 'mermaid_graph' is provided, use it to understand relationships (it is not included in this prompt but exists in context).
-    
-    Please provide a structured analysis in valid JSON format with the following keys:
-    - "architecture_type": (string) e.g., "MVC", "Microservices", "Script Collection", "Monolith"
-    - "patterns": (list of strings) Architectural patterns detected
-    - "layers": (list of strings) Identified layers (e.g., Presentation, Logic)
-    - "modules": (list of strings) Key identified modules
-    - "issues": (list of strings) Potential architectural or code quality issues
-    - "recommendations": (list of strings) High-level improvement recommendations
-    - "actionable_tasks": (list of objects) 3 concrete tasks, each with "title" and "description" fields.
-    
-    IMPORTANT: Base your analysis ONLY on the provided code snippets and project stats. Do not invent files or functions.
-    
-    Do not include markdown formatting like ```json ... ```, just return the raw JSON string if possible, or wrap in code block.
-    """
+    prompt = ARCHITECTURE_JSON_PROMPT.format(
+        summary=summary,
+        user_request=user_request
+    )
     
     try:
         response = llm.invoke([

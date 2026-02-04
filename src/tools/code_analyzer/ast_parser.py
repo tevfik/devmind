@@ -132,6 +132,9 @@ class AnalysisVisitor(ast.NodeVisitor):
         
         decorators = [self._get_decorator_name(d) for d in node.decorator_list]
         
+        # Calculate complexity
+        complexity = self._calculate_cyclomatic_complexity(node)
+        
         func_info = FunctionInfo(
             name=node.name,
             args=args,
@@ -141,7 +144,7 @@ class AnalysisVisitor(ast.NodeVisitor):
             end_line=node.end_lineno or node.lineno,
             decorators=decorators,
             is_async=is_async,
-            complexity=1 # TODO: McCabe
+            complexity=complexity
         )
         
         if self.current_class:
@@ -152,6 +155,21 @@ class AnalysisVisitor(ast.NodeVisitor):
             self.functions.append(func_info)
             
         self.generic_visit(node)
+
+    def _calculate_cyclomatic_complexity(self, node: ast.AST) -> int:
+        """
+        Calculate McCabe Cyclomatic Complexity.
+        Start with 1.
+        Add 1 for each control flow branch (if, for, while, except, etc.)
+        """
+        complexity = 1
+        for child in ast.walk(node):
+            if isinstance(child, (ast.If, ast.While, ast.For, ast.AsyncFor, ast.ExceptHandler, ast.With, ast.AsyncWith, ast.Assert)):
+                complexity += 1
+            elif isinstance(child, ast.BoolOp):
+                # Add 1 for each boolean operator (and, or) strictly
+                complexity += len(child.values) - 1
+        return complexity
 
     def _get_decorator_name(self, node) -> str:
         if isinstance(node, ast.Name):

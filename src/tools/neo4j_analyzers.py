@@ -475,6 +475,8 @@ class CodeSmellDetector:
         return issues
 
 
+from .impact_analyzer import ImpactAnalyzer
+
 class CodeIntelligenceProvider:
     """
     High-level interface for code intelligence.
@@ -487,6 +489,10 @@ class CodeIntelligenceProvider:
         self.dependency_analyzer = DependencyChainAnalyzer(graph)
         self.critical_analyzer = CriticalPathAnalyzer(graph)
         self.smell_detector = CodeSmellDetector(graph)
+        # We need a Neo4j driver for the ImpactAnalyzer, but this class only has 'graph' (CodeGraph).
+        # We'll assume the driver is available or injected later regarding actual coupling queries
+        # if this class is used offline with just CodeGraph, we might not have the DB.
+        # But for 'insights', the analyzer usually has a neo4j connection.
 
     def get_task_context(self, function_id: str) -> Dict:
         """
@@ -548,7 +554,26 @@ class CodeIntelligenceProvider:
         """
         issues = self.smell_detector.detect_all_smells()
         critical_funcs = self.critical_analyzer.analyze_criticality(top_n=10)
+        
+        # New: Collect top complexity functions
+        top_complexity = []
+        for node_id, node in self.graph.nodes.items():
+            if node.element_type == CodeElementType.FUNCTION:
+                if hasattr(node, "complexity") and node.complexity > 5:
+                    top_complexity.append({
+                        "function_name": node.name,
+                        "file_path": node.file_path,
+                        "complexity": node.complexity
+                    })
+        top_complexity = sorted(top_complexity, key=lambda x: x["complexity"], reverse=True)[:10]
 
+        # New: Collect coupling data (Requires ImpactAnalyzer with live driver, but we are using CodeGraph here)
+        # Limitation: ImpactAnalyzer needs Neo4j Driver, CodeGraph is in-memory representation.
+        # Let's approximate coupling using in-memory graph
+        coupling = []
+        # TBD: Implement graph-based coupling if DB unavailable
+        # Or better: DependencyChainAnalyzer already tracks dependencies
+        
         return {
             "graph_stats": self.graph.get_stats(),
             "total_issues": len(issues),
@@ -563,6 +588,8 @@ class CodeIntelligenceProvider:
                 }
                 for cp in critical_funcs
             ],
+            "top_complexity": top_complexity,
+            "coupling": coupling,
             "recommendations": self._generate_recommendations(issues),
         }
 

@@ -134,7 +134,41 @@ class ImpactAnalyzer:
                 "reasoning": reasoning
             }
 
-    def find_highly_coupled_modules(self, threshold: int = 5):
-        """Find modules that reference each other frequently"""
-        # TODO: Implement module-level coupling analysis
-        pass
+    def find_highly_coupled_modules(self, threshold: int = 5) -> List[Dict[str, Any]]:
+        """
+        Find modules (files) that are highly coupled (reference each other frequently).
+        
+        Args:
+           threshold: Minimum number of cross-file calls/imports to consider 'high coupling'
+           
+        Returns:
+           List of dicts describing the coupling
+        """
+        if not self.driver: 
+            return []
+            
+        with self.driver.session() as session:
+            # Query for files calling/importing other files
+            # Determine coupling by counting relationships between different files
+            query = """
+            MATCH (f1:File)-[:CONTAINS]->(func1:Function)-[:CALLS]->(func2:Function)<-[:CONTAINS]-(f2:File)
+            WHERE f1.id <> f2.id
+            WITH f1, f2, count(*) as weight
+            WHERE weight > $threshold
+            RETURN f1.path as source, f2.path as target, weight
+            ORDER BY weight DESC
+            LIMIT 20
+            """
+            
+            result = session.run(query, {"threshold": threshold})
+            
+            coupling_data = []
+            for record in result:
+                coupling_data.append({
+                    "source_module": record["source"],
+                    "target_module": record["target"],
+                    "coupling_strength": record["weight"],
+                    "type": "functional_coupling"  # Based on function calls
+                })
+                
+            return coupling_data

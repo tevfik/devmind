@@ -1,10 +1,10 @@
 .PHONY: help install test clean docker-start docker-stop docker-status test-modules test-all
 
 help:
-	@echo "DevMind AI - Makefile Commands"
+	@echo "Yaver AI - Makefile Commands"
 	@echo ""
 	@echo "Installation:"
-	@echo "  make install          Install DevMind (pipx)"
+	@echo "  make install          Install Yaver (pipx)"
 	@echo "  make install-dev      Install in development mode"
 	@echo ""
 	@echo "Testing:"
@@ -20,15 +20,15 @@ help:
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            Remove temporary files"
-	@echo "  make uninstall        Uninstall DevMind"
+	@echo "  make uninstall        Uninstall Yaver"
 
 install:
-	@echo "🚀 Installing DevMind with pipx..."
+	@echo "🚀 Installing Yaver with pipx..."
 	pipx install -e . --force
-	@echo "✅ Installation complete! Run 'devmind --help' to get started."
+	@echo "✅ Installation complete! Run 'yaver --help' to get started."
 
 install-dev:
-	@echo "🔧 Installing DevMind in development mode..."
+	@echo "🔧 Installing Yaver in development mode..."
 	pip install -e .
 	@echo "✅ Development installation complete!"
 
@@ -48,13 +48,13 @@ test-all: test test-modules
 	@echo "✅ All tests completed!"
 
 docker-start:
-	@devmind docker start
+	@yaver docker start
 
 docker-stop:
-	@devmind docker stop
+	@yaver docker stop
 
 docker-status:
-	@devmind docker status
+	@yaver docker status
 
 clean:
 	@echo "🧹 Cleaning temporary files..."
@@ -65,6 +65,6 @@ clean:
 	@echo "✅ Cleanup complete!"
 
 uninstall:
-	@echo "🗑️  Uninstalling DevMind..."
-	pipx uninstall devmind
-	@echo "✅ DevMind uninstalled!"
+	@echo "🗑️  Uninstalling Yaver..."
+	pipx uninstall yaver
+	@echo "✅ Yaver uninstalled!"

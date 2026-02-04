@@ -1,28 +1,28 @@
-# 🐳 DevMind Docker Services
+# 🐳 Yaver Docker Services
 
-DevMind requires several services to run. Use Docker Compose to manage them easily.
+Yaver requires several services to run. Use Docker Compose to manage them easily.
 
 ## Quick Start
 
 ```bash
 # Start all services
-devmind docker start
+yaver docker start
 
 # Check status
-devmind docker status
+yaver docker status
 
 # Stop services
-devmind docker stop
+yaver docker stop
 ```
 
 ## Available Commands
 
 ```bash
-devmind docker start      # Start all services
-devmind docker stop       # Stop all services
-devmind docker status     # Check service status
-devmind docker logs       # View real-time logs
-devmind docker restart    # Restart all services
+yaver docker start      # Start all services
+yaver docker stop       # Stop all services
+yaver docker status     # Check service status
+yaver docker logs       # View real-time logs
+yaver docker restart    # Restart all services
 ```
 
 ## Services Included
@@ -81,21 +81,21 @@ docker ps  # Find container using port 6333
 docker stop <container_id>
 ```
 
-### "Connection refused" when running DevMind
+### "Connection refused" when running Yaver
 Make sure services are running:
 ```bash
-devmind docker status
+yaver docker status
 ```
 
 If status shows services as down, try restarting:
 ```bash
-devmind docker restart
+yaver docker restart
 ```
 
 ### Check service logs
 ```bash
 # All services
-devmind docker logs
+yaver docker logs
 
 # Specific service
 docker-compose -f docker/docker-compose.yml logs neo4j
@@ -106,17 +106,17 @@ docker-compose -f docker/docker-compose.yml logs -f qdrant
 
 ## Environment Configuration
 
-Services use credentials from `.devmind/config.json`. Modify service passwords:
+Services use credentials from `.yaver/config.json`. Modify service passwords:
 
 ```bash
 # Edit .env file
-nano .devmind/.env
+nano .yaver/.env
 
 # Update Neo4j password:
 NEO4J_PASSWORD=your_new_password
 
 # Restart services to apply changes
-devmind docker restart
+yaver docker restart
 ```
 
 ## Performance Tips
@@ -141,7 +141,7 @@ docker-compose down
 
 ### Stop all services
 ```bash
-devmind docker stop
+yaver docker stop
 ```
 
 ### Remove containers and volumes
@@ -153,18 +153,18 @@ docker-compose -f docker/docker-compose.yml down -v
 ### Restart from scratch
 ```bash
 # Stop
-devmind docker stop
+yaver docker stop
 
 # Remove data
 rm -rf docker/data/
 
 # Start fresh
-devmind docker start
+yaver docker start
 ```
 
 ## Network
 
-Services are on an isolated Docker network `devmind-network`. They can communicate by container name.
+Services are on an isolated Docker network `yaver-network`. They can communicate by container name.
 
 ## Production Deployment
 

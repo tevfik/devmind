@@ -43,6 +43,7 @@ PLANNER_USER_TEMPLATE = load_raw_prompt("planner_user.md")
 CODER_USER_TEMPLATE = load_raw_prompt("coder_user.md")
 CODER_FIX_TEMPLATE = load_raw_prompt("coder_fix.md")
 REVIEWER_USER_TEMPLATE = load_raw_prompt("reviewer_user.md")
+ARCHITECTURE_JSON_PROMPT = load_raw_prompt("architecture_analysis_json.md")
 
 # Deep Analysis System Prompts
 CALL_GRAPH_ANALYZER_PROMPT = load_raw_prompt("call_graph_analyzer.md")

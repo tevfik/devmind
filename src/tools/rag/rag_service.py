@@ -150,10 +150,60 @@ class RAGService:
         
         # 1. Structural Retrieval (Neo4j)
         if strategy in ["STRUCTURE", "HYBRID"]:
-            # TODO: Implement Text-to-Cypher or specific keyword lookup
-            # For now, simple keyword matching for "calls", "dependencies"
-            # Or just generic neighbor search if entities are named
-            pass
+            try:
+                logger.info("Performing structural retrieval...")
+                # Extract potential entity names from question using heuristic
+                # Simple heuristic: Split by space, take words > 3 chars, remove common stopwords
+                # Better: Use LLM to extract entities
+                
+                # Let's try to extract entities with LLM since we have it available
+                extraction_prompt = f"""
+                Extract relevant code entities (functions, classes, filenames) from the user question.
+                Return ONLY a comma-separated list of names. If none, return empty string.
+                Question: {question}
+                """
+                entities_resp = self.llm.invoke(extraction_prompt)
+                entities_text = entities_resp.content if hasattr(entities_resp, 'content') else str(entities_resp)
+                
+                keywords = [k.strip() for k in entities_text.split(',') if k.strip()]
+                
+                if not keywords:
+                    # Fallback to simple split if LLM fails or returns nothing
+                    ignore = {'what', 'where', 'how', 'when', 'why', 'who', 'show', 'tell', 'find', 'code', 'function', 'class', 'method', 'file', 'calls', 'does', 'is', 'are', 'the', 'a', 'an'}
+                    keywords = [w for w in question.split() if w.lower() not in ignore and len(w) > 3]
+
+                logger.info(f"Structure search keywords: {keywords}")
+                
+                found_nodes = []
+                for kw in keywords[:3]: # Limit to top 3 keywords to avoid noise
+                    hits = self.neo4j.fuzzy_search(kw, limit=2)
+                    found_nodes.extend(hits)
+                
+                # Deduplicate by id
+                unique_nodes = {n['id']: n for n in found_nodes}
+                
+                if unique_nodes:
+                    context_parts.append("--- STRUCTURAL CONTEXT (Graph) ---")
+                    for node_id, node in unique_nodes.items():
+                        neighbors = self.neo4j.get_neighborhood(node_id)
+                        
+                        # Format the output
+                        relations = []
+                        for nb in neighbors:
+                            if nb['direction'] == 'OUT':
+                                relations.append(f"  --[{nb['relation']}]--> {nb['name']} ({nb['type']})")
+                            else:
+                                relations.append(f"  <--[{nb['relation']}]-- {nb['name']} ({nb['type']})")
+                        
+                        node_desc = f"Entity: {node['name']} ({node['type']})"
+                        if relations:
+                            node_desc += "\n" + "\n".join(relations[:10]) # Limit relations
+                        context_parts.append(node_desc + "\n")
+                else:
+                    logger.info("No structural matches found.")
+
+            except Exception as e:
+                logger.error(f"Structural retrieval failed: {e}")
             
         # 2. Semantic Retrieval (Qdrant)
         if strategy in ["SEMANTIC", "HYBRID"]:

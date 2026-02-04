@@ -1,4 +1,4 @@
-# DevMind AI - Git Ignore
+# Yaver AI - Git Ignore
 
 # Python
 __pycache__/
@@ -38,7 +38,7 @@ ENV/
 
 # Project Specific
 .env
-.devmind/
+.yaver/
 .data/
 *.log
 

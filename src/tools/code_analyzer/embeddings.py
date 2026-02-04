@@ -163,6 +163,15 @@ class CodeEmbedder:
         # Remove excessive repetition (e.g., "======" repeated many times)
         text = re.sub(r'(.)\1{20,}', r'\1\1\1', text)
         
+        # Heuristic for word repetition (e.g. "Content Content Content")
+        # If we have many words but very few unique words, it's likely repetitive spam/noise
+        words = text.split()
+        if len(words) > 30:
+            unique_ratio = len(set(words)) / len(words)
+            if unique_ratio < 0.1: # Less than 10% unique words
+                logger.warning(f"Detected repetitive text content. Truncating.")
+                text = " ".join(words[:30])
+        
         # Limit overall length
         if len(text) > 800:
             text = text[:800]

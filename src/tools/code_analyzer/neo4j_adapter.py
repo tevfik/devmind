@@ -298,6 +298,64 @@ class Neo4jAdapter:
             "session_id": session_id
         })
 
+    def fuzzy_search(self, keyword: str, limit: int = 5) -> List[Dict]:
+        """Search for nodes by name (fuzzy match)"""
+        if not self.driver: return []
+        
+        # We search primarily for Functions and Classes as they are most likely query targets
+        # Added Concept for semantic facts
+        query = """
+        MATCH (n) 
+        WHERE (n:Function OR n:Class OR n:File OR n:Concept) AND toLower(n.name) CONTAINS toLower($keyword)
+        RETURN n.id as id, n.name as name, labels(n) as labels, n.path as path
+        LIMIT $limit
+        """
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, {"keyword": keyword, "limit": limit})
+                hits = []
+                for record in result:
+                    labels = [l for l in record["labels"] if l not in ['CodeElement']]
+                    hits.append({
+                        "id": record["id"],
+                        "name": record["name"] or record.get("path", "").split("/")[-1],
+                        "type": labels[0] if labels else "Unknown",
+                    })
+                return hits
+        except Exception as e:
+            logger.error(f"Fuzzy search failed: {e}")
+            return []
+
+    def get_neighborhood(self, node_id: str) -> List[Dict]:
+        """Get immediate neighbors of a node to understand context"""
+        if not self.driver: return []
+        
+        query = """
+        MATCH (n {id: $id})-[r]-(m)
+        RETURN type(r) as rel, startNode(r).id as source, endNode(r).id as target, m.name as name, labels(m) as labels
+        LIMIT 20
+        """
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, {"id": node_id})
+                neighbors = []
+                for record in result:
+                    # Determine direction
+                    direction = "OUT" if record["source"] == node_id else "IN"
+                    labels = [l for l in record["labels"] if l not in ['CodeElement']]
+                    
+                    neighbors.append({
+                        "id": record["target"] if direction == "OUT" else record["source"],
+                        "name": record["name"] or "Unknown",
+                        "type": labels[0] if labels else "Unknown",
+                        "relation": record["rel"],
+                        "direction": direction
+                    })
+                return neighbors
+        except Exception as e:
+            logger.error(f"Neighborhood fetch failed: {e}")
+            return []
+
     def auto_tag_layers(self, repo_id: str):
         """
         Apply architecture layer labels based on heuristics.
@@ -434,10 +492,10 @@ class Neo4jAdapter:
                 
                 session.run(f"""
                     MERGE (s:Concept {{name: $subj_name}})
-                    ON CREATE SET s.repo_id = $repo_id
+                    ON CREATE SET s.id = $subj_name, s.repo_id = $repo_id
                     
                     MERGE (o:Concept {{name: $obj_name}})
-                    ON CREATE SET o.repo_id = $repo_id
+                    ON CREATE SET o.id = $obj_name, o.repo_id = $repo_id
                     
                     MERGE (s)-[r:{pred_type}]->(o)
                     SET r.confidence = $confidence, r.source = 'llm_extraction'

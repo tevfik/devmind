@@ -182,6 +182,22 @@ def cmd_insights(args: argparse.Namespace) -> None:
                 f"  • {func['id']} (importance: {func['importance']:.2f}, calls: {func['call_count']})"
             )
 
+        # New: Display High Complexity
+        if "top_complexity" in insights and insights["top_complexity"]:
+            console.print("\n[bold]🌀 Most Complex Functions:[/bold]")
+            for func in insights["top_complexity"][:5]:
+                console.print(
+                    f"  • {func['function_name']} (File: {func['file_path']}, Complexity: {func['complexity']})"
+                )
+
+        # New: Display High Coupling
+        if "coupling" in insights and insights["coupling"]:
+            console.print("\n[bold]🔗 Highly Coupled Modules:[/bold]")
+            for c in insights["coupling"][:5]:
+                console.print(
+                    f"  • {c['source_module']} ↔ {c['target_module']} (Strength: {c['coupling_strength']})"
+                )
+
     except Exception as e:
         console.print(f"[red]Error analyzing codebase: {e}[/red]")
 
