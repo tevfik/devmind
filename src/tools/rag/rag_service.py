@@ -35,11 +35,26 @@ class RAGService:
         self.embedder = code_embedder
         self.config = config or OllamaConfig()
         
-        self.llm = ChatOllama(
-            base_url=self.config.base_url,
-            model=self.config.model_general,
-            temperature=0.2
-        )
+        # Initialize LLM with authentication
+        init_kwargs = {
+            "base_url": self.config.base_url,
+            "model": self.config.model_general,
+            "temperature": 0.2
+        }
+        
+        # Add authentication if configured
+        if self.config.username and self.config.password:
+            import base64
+            auth_str = f"{self.config.username}:{self.config.password}"
+            b64_auth = base64.b64encode(auth_str.encode()).decode()
+            init_kwargs["client_kwargs"] = {
+                "headers": {
+                    "Authorization": f"Basic {b64_auth}"
+                }
+            }
+            logger.info(f"🔐 RAG Service LLM authentication enabled for user: {self.config.username}")
+        
+        self.llm = ChatOllama(**init_kwargs)
         
         # Prompts
         self._init_prompts()
@@ -183,7 +198,14 @@ class RAGService:
                 else:
                     logger.warning("No results returned from Qdrant")
             except Exception as e:
-                logger.error(f"Semantic retrieval failed: {e}", exc_info=True)
+                error_msg = str(e)
+                if "Vector dimension error" in error_msg or "expected dim" in error_msg:
+                    logger.error(f"Vector dimension mismatch detected. This happens when embedding model changes.")
+                    logger.error(f"Current model '{self.config.model_embedding}' may produce different vector dimensions.")
+                    logger.error(f"To fix: Delete the Qdrant collection and re-run analysis, or switch to the original embedding model.")
+                    logger.error(f"Command: qdrant-client delete-collection devmind_memory (or restart Qdrant)")
+                else:
+                    logger.error(f"Semantic retrieval failed: {e}")
         
         final_context = "\n".join(context_parts)
         logger.info(f"Final context length: {len(final_context)} chars")

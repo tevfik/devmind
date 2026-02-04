@@ -294,16 +294,18 @@ def create_llm(model_type: str = "general", **kwargs) -> ChatOllama:
     
     # Handle both flat and nested config formats
     if isinstance(config, dict):
-        # Flat format (current)
-        model_general = config.get('OLLAMA_MODEL', 'mistral')
-        model_code = config.get('OLLAMA_MODEL_CODER', 'mistral')
-        base_url = config.get('OLLAMA_URL', 'http://localhost:11434')
+        # Flat format (current) - try multiple key variations
+        model_general = config.get('OLLAMA_MODEL_GENERAL', config.get('OLLAMA_MODEL', 'mistral'))
+        model_code = config.get('OLLAMA_MODEL_CODE', config.get('OLLAMA_MODEL_CODER', 'mistral'))
+        model_extraction = config.get('OLLAMA_MODEL_EXTRACTION', model_code)  # Fallback to code model
+        base_url = config.get('OLLAMA_BASE_URL', config.get('OLLAMA_URL', 'http://localhost:11434'))
         username = config.get('OLLAMA_USERNAME')
         password = config.get('OLLAMA_PASSWORD')
     else:
         # Nested format (from config.py)
         model_general = config.ollama.model_general
         model_code = config.ollama.model_code
+        model_extraction = config.ollama.model_extraction
         base_url = config.ollama.base_url
         username = config.ollama.username
         password = config.ollama.password
@@ -311,13 +313,36 @@ def create_llm(model_type: str = "general", **kwargs) -> ChatOllama:
     model_map = {
         "general": model_general,
         "code": model_code,
+        "extraction": model_extraction,
     }
     
     model_name = model_map.get(model_type, model_general)
     
     # Build auth tuple if credentials provided
     if username and password:
-        kwargs['auth'] = (username, password)
+        # LangChain Ollama might not support 'auth' directly in some versions
+        # So we inject it into headers via client_kwargs for robustness
+        import base64
+        auth_str = f"{username}:{password}"
+        b64_auth = base64.b64encode(auth_str.encode()).decode()
+        
+        # Prepare headers
+        headers = kwargs.get('headers', {})
+        headers['Authorization'] = f"Basic {b64_auth}"
+        
+        # We REMOVE headers from kwargs to avoid duplication or confusion
+        # and instead pass them inside client_kwargs which ChatOllama uses for httpx.Client
+        if 'headers' in kwargs:
+            del kwargs['headers']
+            
+        client_kwargs = kwargs.get('client_kwargs', {})
+        client_kwargs['headers'] = headers
+        kwargs['client_kwargs'] = client_kwargs
+        
+        # Also clean up auth if it was passed
+        if 'auth' in kwargs:
+             del kwargs['auth']
+             
         logger.info(f"🔐 Ollama authentication enabled for user: {username}")
     
     # Add SQL Logger Callback if available

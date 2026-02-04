@@ -7,6 +7,7 @@ from typing import List, Generator, Dict
 import logging
 import ast
 from rich.progress import Progress
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .ast_parser import ASTParser
 from .parsers.tree_sitter_parser import TreeSitterParser
@@ -22,6 +23,7 @@ from .leann_adapter import LeannAdapter
 from .chroma_adapter import ChromaAdapter
 from tools.git_analyzer import GitAnalyzer
 from tools.rag.rag_service import RAGService
+from tools.rag.fact_extractor import FactExtractor
 from core.analysis_session import AnalysisSession
 import config.config as cfg 
 
@@ -309,6 +311,25 @@ class CodeAnalyzer:
         }
         # In a real implementation we would track detailed node counts from adapter
         self.session.finalize_report(stats)
+        
+        # Record analysis in history
+        try:
+            project_id = self.session.session_id
+            commit_hash = current_commit
+            
+            from core.project_history import ProjectHistoryManager
+            history_mgr = ProjectHistoryManager()
+            history_mgr.record_analysis(
+                project_id=project_id,
+                repo_path=str(self.repo_path),
+                commit_hash=commit_hash,
+                analysis_type="deep" if use_semantic else "full",
+                files_count=total_files,
+                files_analyzed=processed_count,
+                duration_seconds=0  # Timing would need to be passed in
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record analysis history: {e}")
 
         # Connection should be closed by the caller using analyzer.close()
         # if self.neo4j_adapter:
@@ -395,4 +416,77 @@ class CodeAnalyzer:
                 yield p
             elif p.name in ['Dockerfile', 'Makefile', 'LICENSE', 'Gemfile', 'Rakefile']:
                  yield p
+
+    def extract_semantic_facts(self, file_paths: List[Path] = None):
+        """
+        Run LLM-based fact extraction on specified files (or all source files) 
+        and store the resulting RDF-style triples in Neo4j.
+        Uses parallel processing to speed up LLM extraction.
+        """
+        if not self.neo4j_adapter:
+            logger.warning("Neo4j adapter not connected. Cannot store facts.")
+            return
+
+        # Lazy init extractor
+        if not hasattr(self, 'fact_extractor') or self.fact_extractor is None:
+            try:
+                self.fact_extractor = FactExtractor()
+            except Exception as e:
+                logger.error(f"Failed to initialize FactExtractor: {e}")
+                return
+            
+        targets = file_paths if file_paths else list(self._find_files())
+        
+        logger.info(f"Starting Semantic Fact Extraction on {len(targets)} files...")
+        
+        # Parallel extraction using ThreadPoolExecutor
+        max_workers = 4  # Balance between speed and API rate limits
+        
+        with Progress() as progress:
+            task = progress.add_task("[magenta]Extracting Facts...", total=len(targets))
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks
+                future_to_file = {}
+                for fp in targets:
+                    future = executor.submit(self._extract_and_store_facts, fp)
+                    future_to_file[future] = fp
+                
+                # Process completed tasks
+                for future in as_completed(future_to_file):
+                    fp = future_to_file[future]
+                    try:
+                        future.result()  # Will raise if extraction failed
+                    except Exception as e:
+                        logger.debug(f"Fact extraction skipped for {fp.name}: {e}")
+                    
+                    progress.advance(task)
+                
+        logger.info("Semantic Fact Extraction completed.")
+
+    def _extract_and_store_facts(self, file_path: Path):
+        """
+        Extract facts from a single file and store in Neo4j.
+        This runs in a separate thread.
+        """
+        try:
+            # Read content (with size limit)
+            content = file_path.read_text(errors='ignore')
+            if not content.strip():
+                return
+                
+            if len(content) > 20000:
+                # Take head and tail for context
+                content = content[:15000] + "\n...[truncated]...\n" + content[-5000:]
+            
+            # LLM Extraction (this is what makes it slow)
+            facts = self.fact_extractor.extract_facts(content)
+            
+            # Store in Neo4j
+            if facts and self.neo4j_adapter:
+                self.neo4j_adapter.store_facts(facts, repo_id=str(self.repo_path))
+                    
+        except Exception as e:
+            logger.debug(f"Error in _extract_and_store_facts for {file_path}: {e}")
+            raise
 

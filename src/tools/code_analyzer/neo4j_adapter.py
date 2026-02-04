@@ -43,30 +43,46 @@ class Neo4jAdapter:
                     logger.warning(f"Schema init warning: {e}")
 
     def detect_circular_dependencies(self, repo_id: str = None):
-        """Find circular function calls in the graph"""
+        """Find circular function calls in the graph (excluding self-recursion)"""
         if not self.driver:
             return []
             
         with self.driver.session() as session:
             if repo_id:
                 # Filter by repo_id if provided
+                # Use *2..5 (minimum 2 hops) to exclude self-loops (1-hop recursion)
                 result = session.run("""
                     MATCH (f:File {repo_id: $repo_id})
-                    MATCH path = (n:Function)-[:CALLS*1..5]->(n)
+                    MATCH path = (n:Function)-[:CALLS*2..5]->(n)
                     WHERE (n)-[:DEFINES_METHOD|DEFINES_FUNCTION*1..2]-(f)
                     RETURN [x in nodes(path) | x.id] as cycle, length(path) as len
                     ORDER BY len ASC
                     LIMIT 10
                 """, {"repo_id": repo_id})
             else:
-                # Original query for all repos
+                # Original query for all repos - exclude self-recursion (use *2.. instead of *1..)
                 result = session.run("""
-                    MATCH path = (n:Function)-[:CALLS*1..5]->(n)
+                    MATCH path = (n:Function)-[:CALLS*2..5]->(n)
                     RETURN [x in nodes(path) | x.id] as cycle, length(path) as len
                     ORDER BY len ASC
                     LIMIT 10
                 """)
-            return [record["cycle"] for record in result]
+            
+            # Additional filter: exclude cycles with only 1 unique node (self-loops)
+            # Normalize cycles to deduplicate (A->B->A and B->A->B are the same cycle)
+            cycles = []
+            seen_cycles = set()
+            
+            for record in result:
+                cycle = record["cycle"]
+                if len(set(cycle)) > 1:  # Only include if more than 1 unique function in cycle
+                    # Normalize: use sorted tuple of unique nodes to identify same cycles
+                    normalized = tuple(sorted(set(cycle)))
+                    if normalized not in seen_cycles:
+                        seen_cycles.add(normalized)
+                        cycles.append(cycle)
+            
+            return cycles
             
     def get_call_graph(self, root_function_name: str, depth: int = 3) -> Dict:
         """
@@ -391,3 +407,41 @@ class Neo4jAdapter:
                 WHERE n.unresolved_calls IS NOT NULL
                 REMOVE n.unresolved_calls
             """)
+
+    def store_facts(self, facts: List[Any], repo_id: str = None):
+        """
+        Store generic extracted facts into the Knowledge Graph.
+        
+        Args:
+            facts: List of FactTriple objects (from fact_extractor)
+            repo_id: Optional repo context
+        """
+        if not self.driver or not facts:
+            return
+            
+        with self.driver.session() as session:
+            for fact in facts:
+                # Sanitize naming
+                subj_name = fact.subject.strip()
+                pred_type = fact.predicate.upper().replace(" ", "_").strip()
+                obj_name = fact.object.strip()
+                
+                # Create or find Subject Node (Entity)
+                # We use specific label 'Entity' or 'Concept' to distinguish from Code nodes (Function/Class)
+                # But if subject matches an existing Class/Function, we should link to it!
+                
+                session.run(f"""
+                    MERGE (s:Concept {{name: $subj_name}})
+                    ON CREATE SET s.repo_id = $repo_id
+                    
+                    MERGE (o:Concept {{name: $obj_name}})
+                    ON CREATE SET o.repo_id = $repo_id
+                    
+                    MERGE (s)-[r:{pred_type}]->(o)
+                    SET r.confidence = $confidence, r.source = 'llm_extraction'
+                """, {
+                    "subj_name": subj_name,
+                    "obj_name": obj_name,
+                    "confidence": fact.confidence,
+                    "repo_id": repo_id
+                })

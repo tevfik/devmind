@@ -3,6 +3,7 @@ Tree-sitter Parser
 Generic parser implementation using Tree-sitter for multiple languages.
 """
 import logging
+import warnings
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import tree_sitter
@@ -13,6 +14,10 @@ from ..models import FileAnalysis, ClassInfo, FunctionInfo
 from .base import BaseParser
 
 logger = logging.getLogger(__name__)
+
+# Suppress tree-sitter deprecation warning about Language(path, name)
+# This is an issue in tree_sitter_languages library, not our code
+warnings.filterwarnings("ignore", category=FutureWarning, module="tree_sitter")
 
 class TreeSitterParser(BaseParser):
     """
@@ -32,6 +37,8 @@ class TreeSitterParser(BaseParser):
             self._load_queries()
         except Exception as e:
             logger.error(f"Failed to initialize Tree-sitter for {language_name}: {e}")
+            # Ensure we can see why it failed in logs if needed
+            logger.debug(f"Tree-sitter init details: {e}", exc_info=True)
             raise
 
     def _load_queries(self):

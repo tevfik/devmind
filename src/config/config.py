@@ -12,10 +12,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class OllamaConfig(BaseSettings):
     """Ollama LLM configuration"""
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", str(Path.home() / ".devmind" / ".env")),
+        env_file_encoding="utf-8", 
+        extra="ignore"
+    )
     base_url: str = Field(default="http://localhost:11434", validation_alias="OLLAMA_BASE_URL")
     model_general: str = Field(default="llama3.2:3b-instruct-q4_K_M", validation_alias="OLLAMA_MODEL_GENERAL")
     model_code: str = Field(default="qwen2.5-coder:7b-instruct-q4_K_M", validation_alias="OLLAMA_MODEL_CODE")
+    model_extraction: str = Field(default="qwen2.5-coder:7b-instruct-q4_K_M", validation_alias="OLLAMA_MODEL_EXTRACTION")
     model_embedding: str = Field(default="nomic-embed-text:latest", validation_alias="OLLAMA_MODEL_EMBEDDING")
     username: Optional[str] = Field(default=None, validation_alias="OLLAMA_USERNAME")
     password: Optional[str] = Field(default=None, validation_alias="OLLAMA_PASSWORD")
@@ -62,7 +67,11 @@ class VectorDBConfig(BaseSettings):
 
 class QdrantConfig(BaseSettings):
     """Qdrant vector database configuration"""
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", str(Path.home() / ".devmind" / ".env")),
+        env_file_encoding="utf-8", 
+        extra="ignore"
+    )
     host: Optional[str] = Field(default="localhost", validation_alias="QDRANT_HOST")
     port: int = Field(default=6333, validation_alias="QDRANT_PORT")
     path: Optional[str] = Field(default=None, validation_alias="QDRANT_PATH")
@@ -79,7 +88,11 @@ class LeannConfig(BaseSettings):
 
 class Neo4jConfig(BaseSettings):
     """Neo4j graph database configuration"""
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", str(Path.home() / ".devmind" / ".env")),
+        env_file_encoding="utf-8", 
+        extra="ignore"
+    )
     uri: str = Field(default="bolt://localhost:7687", validation_alias="NEO4J_URI")
     username: str = Field(default="neo4j", validation_alias="NEO4J_USERNAME")
     password: str = Field(default="password", validation_alias="NEO4J_PASSWORD")

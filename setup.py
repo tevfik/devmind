@@ -8,11 +8,20 @@ Then use: devmind chat
 All integrations included:
 - Qdrant vector database for semantic search
 - Neo4j for code graph analysis  
-- Ollama for local LLM
+- Ollama for local LLM (multiple specialized models)
 - LangChain for orchestration
 - ChromaDB for memory
 - FastAPI for API server
 - Rich for beautiful terminal UI
+
+Configuration via ~/.devmind/.env:
+  OLLAMA_BASE_URL=https://ollama.bezg.in
+  OLLAMA_MODEL_GENERAL=nemotron-3-nano:30b (Chat, general queries)
+  OLLAMA_MODEL_CODE=deepseek-coder-v2:16b (Code analysis)
+  OLLAMA_MODEL_EXTRACTION=qwen2.5-coder:7b (Fact extraction - faster)
+  OLLAMA_MODEL_EMBEDDING=nomic-embed-text (Vector embeddings)
+  OLLAMA_USERNAME=admin (Optional: For remote Ollama)
+  OLLAMA_PASSWORD=password (Optional: For remote Ollama)
 """
 
 from setuptools import setup, find_packages

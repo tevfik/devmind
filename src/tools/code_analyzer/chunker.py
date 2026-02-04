@@ -66,9 +66,13 @@ class CodeChunker:
             # TODO: Implement sliding window for large files
             description = f"Content of file {rel_path}"
             
+            # Reduce fallback chunk size to 600 chars to avoid NaN issues with some embedding models
+            # on large blocks of text (especially repetitive ones like config files)
+            safe_content = source_code[:600]
+            
             chunks.append(CodeChunk(
                 chunk_id=f"{rel_path}::whole",
-                text_content=f"File: {rel_path}\nType: File Content\nLanguage: {file_analysis.language}\n\n{source_code[:3000]}",
+                text_content=f"File: {rel_path}\nType: File Content\nLanguage: {file_analysis.language}\n\n{safe_content}",
                 metadata={
                     "id": f"{rel_path}::whole",
                     "file_path": rel_path,
@@ -76,7 +80,7 @@ class CodeChunker:
                     "name": rel_path.split("/")[-1],
                     "language": file_analysis.language
                 },
-                original_source=source_code[:5000]
+                original_source=source_code[:3000]
             ))
                     
         return chunks
@@ -108,8 +112,8 @@ class CodeChunker:
         doc_part = f"\nDocstring: {func.docstring}" if func.docstring else ""
         
         # Limit code body length for embedding (keep start)
-        # simplistic truncation for now
-        truncated_code = source[:2000] # character limit roughly
+        # Aggressive truncation to avoid NaN errors from embedding model
+        truncated_code = source[:800] # Reduced to avoid problematic patterns
         
         text_content = (
             f"File: {file_path}\n"

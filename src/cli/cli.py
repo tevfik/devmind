@@ -187,6 +187,17 @@ Examples:
     project_delete.add_argument('project_id', help='Project ID to delete')
     project_delete.add_argument('--force', '-f', action='store_true', help='Skip confirmation')
     
+    # project history <project_id>
+    project_history = project_subparsers.add_parser('history', help='Show analysis history for a project')
+    project_history.add_argument('project_id', help='Project ID')
+    project_history.add_argument('--limit', type=int, default=20, help='Number of records to show (default: 20)')
+    
+    # project cleanup <project_id>
+    project_cleanup = project_subparsers.add_parser('cleanup', help='Clean old analyses for a project')
+    project_cleanup.add_argument('project_id', help='Project ID')
+    project_cleanup.add_argument('--keep-last', type=int, default=10, help='Keep last N analyses (default: 10)')
+    project_cleanup.add_argument('--force', '-f', action='store_true', help='Skip confirmation')
+    
     project_parser.set_defaults(func=handle_project)
     
     # Status command
@@ -548,6 +559,14 @@ def handle_project(args):
     # Delete project
     elif args.project_action == "delete":
         handle_project_delete(args)
+    
+    # Show analysis history
+    elif args.project_action == "history":
+        handle_project_history(args)
+    
+    # Cleanup old analyses
+    elif args.project_action == "cleanup":
+        handle_project_cleanup(args)
 
 
 def handle_status(args):
@@ -636,7 +655,10 @@ def handle_analyze(args):
         from tools.git_analyzer import GitAnalyzer
         from rich.table import Table
         from rich.panel import Panel
+        from rich.console import Console
         import os
+        
+        console = Console()
         
         analyzer = GitAnalyzer(args.path)
         status = analyzer.get_status()
@@ -652,12 +674,10 @@ def handle_analyze(args):
         
         if args.type == 'deep':
             from tools.code_analyzer.analyzer import CodeAnalyzer
-            from rich.console import Console
             from pathlib import Path
             import time
             import uuid
             
-            console = Console()
             console.print(f"[bold cyan]🔍 Starting Deep Code Analysis...[/bold cyan]")
             
             # Create session ID (or use provided project_id)
@@ -686,12 +706,13 @@ def handle_analyze(args):
                     console.print(f"[yellow]    Analysis will run but graph data won't be stored.[/yellow]")
 
                 start_time = time.time()
-                # Use incremental flag if passed (mapped from --incremental arg if we add it)
-                # But CLI args don't have it yet. Let's assume standard analysis for now
-                # or add argument in analyze_parser
-                analyzer.analyze_repository(incremental=getattr(args, 'incremental', False))
+                # Deep analysis includes semantic embeddings
+                analyzer.analyze_repository(
+                    incremental=getattr(args, 'incremental', False),
+                    use_semantic=True  # Enable Qdrant embeddings for deep analysis
+                )
                 
-                # Semantic extraction for deep analysis
+                # Semantic fact extraction for knowledge graph
                 console.print(f"[bold]🧠 Extracting Semantic Facts...[/bold]")
                 analyzer.extract_semantic_facts()
                 
@@ -867,7 +888,30 @@ def handle_learn(args):
     qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
     
     console.print(f"[dim]Neo4j: {neo4j_uri}[/dim]")
-    console.print(f"[dim]Qdrant: {qdrant_host}:{qdrant_port}[/dim]\n")
+    console.print(f"[dim]Qdrant: {qdrant_host}:{qdrant_port}[/dim]")
+    
+    # Phase 1: Check if analysis should be skipped
+    if args.incremental:
+        from core.incremental_manager import IncrementalAnalysisManager
+        
+        incremental_mgr = IncrementalAnalysisManager(str(repo_path))
+        should_skip, reason = incremental_mgr.should_skip_analysis(project_id)
+        
+        if should_skip:
+            console.print(f"[dim]Mode: Incremental (skip if no changes)[/dim]")
+            console.print(f"[yellow]⏭️  Skipping analysis - {reason}[/yellow]\n")
+            return
+        else:
+            console.print(f"[dim]Mode: Incremental ({reason})[/dim]")
+            
+            # Get changed files for Phase 2
+            changed = incremental_mgr.get_changed_files(project_id)
+            if changed:
+                console.print(f"[cyan]📝 {len(changed)} files changed since last analysis[/cyan]\n")
+            else:
+                console.print(f"[dim]   Analyzing all files (cannot determine changed files)[/dim]\n")
+    else:
+        console.print(f"[dim]Mode: Full analysis[/dim]\n")
     
     try:
         # Pass project_id as the session_id for CodeAnalyzer to store data under this ID
@@ -2067,6 +2111,98 @@ def handle_project_delete(args):
         console.print(f"\n[bold red]❌ Error:[/bold red] {str(e)}")
         import traceback
         traceback.print_exc()
+
+
+def handle_project_history(args):
+    """Show analysis history for a project"""
+    from rich.console import Console
+    from rich.table import Table
+    from pathlib import Path
+    
+    console = Console()
+    project_id = args.project_id
+    limit = args.limit
+    
+    try:
+        from core.project_history import ProjectHistoryManager
+        
+        history_mgr = ProjectHistoryManager()
+        history = history_mgr.get_history(project_id, limit=limit)
+        
+        if not history:
+            console.print(f"\n[yellow]No analysis history found for project '{project_id}'[/yellow]\n")
+            return
+        
+        # Create table
+        table = Table(title=f"📊 Analysis History: {project_id}", show_header=True, header_style="bold cyan")
+        table.add_column("#", style="dim")
+        table.add_column("Commit", style="cyan", no_wrap=True)
+        table.add_column("Type", style="green")
+        table.add_column("Files", style="yellow")
+        table.add_column("Duration", style="magenta")
+        table.add_column("Timestamp", style="dim")
+        
+        for i, record in enumerate(history, 1):
+            commit_short = record['commit_hash'][:8] if record['commit_hash'] else "N/A"
+            duration = f"{record['duration_seconds']:.1f}s" if record['duration_seconds'] else "N/A"
+            
+            table.add_row(
+                str(i),
+                commit_short,
+                record['analysis_type'],
+                str(record['files_analyzed'] or record['files_count'] or 0),
+                duration,
+                record['analysis_timestamp'][:10]
+            )
+        
+        console.print(f"")
+        console.print(table)
+        console.print(f"\n[dim]Showing {len(history)} of {limit} records[/dim]\n")
+        
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {str(e)}\n")
+        import traceback
+        traceback.print_exc()
+
+
+def handle_project_cleanup(args):
+    """Clean old analyses for a project"""
+    from rich.console import Console
+    from rich.prompt import Confirm
+    
+    console = Console()
+    project_id = args.project_id
+    keep_last = args.keep_last
+    
+    # Confirmation
+    if not args.force:
+        confirmed = Confirm.ask(
+            f"[yellow]Keep last {keep_last} analyses for '{project_id}', delete older ones?[/yellow]",
+            default=False
+        )
+        if not confirmed:
+            console.print("[dim]Cancelled.[/dim]")
+            return
+    
+    try:
+        from core.project_history import ProjectHistoryManager
+        
+        history_mgr = ProjectHistoryManager()
+        deleted_count = history_mgr.cleanup_old_analyses(project_id, keep_last=keep_last)
+        
+        if deleted_count > 0:
+            console.print(f"\n[bold green]✅ Cleanup Complete[/bold green]")
+            console.print(f"[dim]   Deleted {deleted_count} old analyses for '{project_id}'[/dim]")
+            console.print(f"[dim]   Kept last {keep_last} analyses[/dim]\n")
+        else:
+            console.print(f"\n[yellow]No old analyses to delete. Project has {keep_last} or fewer analyses.[/yellow]\n")
+        
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] {str(e)}\n")
+        import traceback
+        traceback.print_exc()
+
+
 
 
 if __name__ == "__main__":
