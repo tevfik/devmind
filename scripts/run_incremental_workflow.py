@@ -214,14 +214,14 @@ def show_git_log(repo_path):
     run_cmd("git log --oneline", cwd=repo_path)
 
 def test_yaver_workflow(repo_path, project_id):
-    """Test the yaver learn workflow"""
+    """Test the yaver analyze --type deep workflow"""
     print(f"\n{BOLD}{GREEN}🚀 Testing Yaver Workflow{END}")
     
     # Test 1: Full analysis (first run)
     print(f"\n{BOLD}{BLUE}Test 1: Full Analysis (First Run){END}")
     print(f"{YELLOW}This will analyze all files since it's the first run{END}")
     run_cmd(
-        f"yaver learn {repo_path} --project-id {project_id}",
+        f"yaver analyze --type deep {repo_path} --project-id {project_id}",
         description="Run full analysis on test repository"
     )
     
@@ -235,7 +235,7 @@ def test_yaver_workflow(repo_path, project_id):
     print(f"\n{BOLD}{BLUE}Test 2: Incremental Analysis (No Changes){END}")
     print(f"{YELLOW}Same commit hash → should SKIP analysis{END}")
     run_cmd(
-        f"yaver learn {repo_path} --project-id {project_id} --incremental",
+        f"yaver analyze --type deep {repo_path} --project-id {project_id} --incremental",
         description="Run incremental analysis (should skip)"
     )
     
@@ -249,7 +249,7 @@ def test_after_modification(repo_path, project_id, mod_name):
     print(f"{YELLOW}New commit hash detected → will analyze changed files{END}")
     
     run_cmd(
-        f"yaver learn {repo_path} --project-id {project_id} --incremental",
+        f"yaver analyze --type deep {repo_path} --project-id {project_id} --incremental",
         description="Run incremental analysis after changes"
     )
     

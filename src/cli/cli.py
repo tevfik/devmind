@@ -75,8 +75,7 @@ Examples:
   yaver new api --type fastapi  Create FastAPI project
   yaver docker status      Check Docker services
   yaver chat               Start interactive AI chat
-  yaver learn              Deep learn current repository (AST + embeddings)
-  yaver learn /path/repo   Learn a specific repository
+  yaver analyze --type deep Deep learn repository (AST + embeddings)
   yaver commit             Generate commit message
   yaver explain "command"  Explain a shell command
   yaver --version          Show version
@@ -234,16 +233,6 @@ Examples:
     analyze_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
     analyze_parser.add_argument('--project-id', help='Project ID for storage (deep mode)')
     analyze_parser.set_defaults(func=handle_analyze)
-    
-    # Learn command - Deprecated, now alias to analyze --type deep
-    learn_parser = subparsers.add_parser(
-        'learn',
-        help='[DEPRECATED] Use: yaver analyze --type deep'
-    )
-    learn_parser.add_argument('path', nargs='?', default='.', help='Path to repository (default: current dir)')
-    learn_parser.add_argument('--incremental', action='store_true', help='Only analyze changed files')
-    learn_parser.add_argument('--project-id', help='Custom project ID (default: auto-generated)')
-    learn_parser.set_defaults(func=handle_learn_deprecated)
 
     # Agent command - Autonomous code quality agent
     agent_parser = subparsers.add_parser(
@@ -895,222 +884,6 @@ def handle_analyze(args):
         print("   Try: pip install -e . --upgrade")
     except Exception as e:
         print(f"❌ Analysis failed: {e}")
-
-
-def handle_learn_deprecated(args):
-    """Handle deprecated 'learn' command - redirect to analyze --type deep"""
-    from rich.console import Console
-    
-    console = Console()
-    console.print("\n[yellow]⚠️  WARNING: 'yaver learn' is deprecated![/yellow]")
-    console.print("[yellow]   Use 'yaver analyze --type deep' instead[/yellow]\n")
-    
-    # Convert old args to new args format
-    class NewArgs:
-        path = args.path
-        type = 'deep'
-        target = None
-        incremental = args.incremental
-        project_id = args.project_id
-    
-    # Call the new unified handler
-    return handle_analyze(NewArgs())
-
-
-def handle_learn(args):
-    """Handle deep repository learning (original implementation kept for compatibility)"""
-    from rich.console import Console
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-    from tools.code_analyzer.analyzer import CodeAnalyzer
-    from pathlib import Path
-    import time
-    import uuid
-    import os
-    
-    console = Console()
-    repo_path = Path(args.path).resolve()
-    
-    if not repo_path.exists():
-        console.print(f"[bold red]❌ Error:[/bold red] Repository path does not exist: {repo_path}")
-        return
-    
-    console.print(f"\n[bold cyan]🧠 Deep Learning Repository:[/bold cyan] {repo_path.name}")
-    console.print(f"[dim]Location: {repo_path}[/dim]\n")
-    
-    # Project ID (formerly session_id in backend)
-    # We use project_id for persistent storage of learned code
-    project_id = args.project_id or f"proj_{uuid.uuid4().hex[:8]}"
-    console.print(f"[dim]Project ID: {project_id}[/dim]")
-    
-    # Neo4j Config
-    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
-    
-    # Qdrant Config
-    qdrant_host = os.getenv("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
-    
-    console.print(f"[dim]Neo4j: {neo4j_uri}[/dim]")
-    console.print(f"[dim]Qdrant: {qdrant_host}:{qdrant_port}[/dim]")
-    
-    # Phase 1: Check if analysis should be skipped
-    if args.incremental:
-        from core.incremental_manager import IncrementalAnalysisManager
-        
-        incremental_mgr = IncrementalAnalysisManager(str(repo_path))
-        should_skip, reason = incremental_mgr.should_skip_analysis(project_id)
-        
-        if should_skip:
-            console.print(f"[dim]Mode: Incremental (skip if no changes)[/dim]")
-            console.print(f"[yellow]⏭️  Skipping analysis - {reason}[/yellow]\n")
-            return
-        else:
-            console.print(f"[dim]Mode: Incremental ({reason})[/dim]")
-            
-            # Get changed files for Phase 2
-            changed = incremental_mgr.get_changed_files(project_id)
-            if changed:
-                console.print(f"[cyan]📝 {len(changed)} files changed since last analysis[/cyan]\n")
-            else:
-                console.print(f"[dim]   Analyzing all files (cannot determine changed files)[/dim]\n")
-    else:
-        console.print(f"[dim]Mode: Full analysis[/dim]\n")
-    
-    try:
-        # Pass project_id as the session_id for CodeAnalyzer to store data under this ID
-        analyzer = CodeAnalyzer(project_id, repo_path)
-        
-        # Connect to databases
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
-        ) as progress:
-            task = progress.add_task("Connecting to databases...", total=None)
-            
-            try:
-                analyzer.connect_db(neo4j_uri, (neo4j_user, neo4j_password))
-                progress.update(task, description="✅ Connected to Neo4j")
-            except Exception as e:
-                progress.update(task, description=f"⚠️  Neo4j connection failed: {e}")
-                console.print(f"[yellow]   Continuing without graph database[/yellow]")
-        
-        # Analyze repository
-        console.print(f"\n[bold]📊 Analyzing codebase...[/bold]")
-        start_time = time.time()
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            console=console
-        ) as progress:
-            task = progress.add_task(
-                "Processing files...",
-                total=None
-            )
-            
-            # Run analysis with semantic embeddings
-            analyzer.analyze_repository(
-                incremental=args.incremental,
-                use_semantic=True  # Enable embeddings for RAG
-            )
-            
-            duration = time.time() - start_time
-            progress.update(task, description=f"✅ Analysis complete ({duration:.2f}s)")
-        
-        # Semantic Fact Extraction
-        # We run this outside the main analysis progress bar to avoid UI conflicts
-        console.print(f"\n[bold]🧠 Enriching Knowledge Graph...[/bold]")
-        analyzer.extract_semantic_facts()
-        
-        # Display results
-        console.print(f"\n[bold green]✅ Repository Learning Complete![/bold green]")
-        console.print(f"   Duration: {duration:.2f}s")
-        console.print(f"   Project: {project_id}\n")
-        
-        # Show statistics
-        if analyzer.neo4j_adapter:
-            console.print(f"[bold]📈 Graph Statistics for {repo_path.name}:[/bold]")
-            
-            # Query node counts for this repo only
-            repo_id = repo_path.name
-            with analyzer.neo4j_adapter.driver.session() as db_session:
-                result = db_session.run("""
-                    MATCH (n)
-                    WHERE n.repo_id = $repo_id
-                    RETURN labels(n)[0] as type, count(n) as count
-                    ORDER BY type
-                """, {"repo_id": repo_id})
-                for record in result:
-                    node_type = record["type"] or "Unknown"
-                    count = record["count"]
-                    console.print(f"   • {node_type}: {count}")
-
-            # Show File Language Breakdown
-            with analyzer.neo4j_adapter.driver.session() as db_session:
-                result = db_session.run("""
-                    MATCH (n:File)
-                    WHERE n.repo_id = $repo_id
-                    RETURN n.language as lang, count(n) as count
-                    ORDER BY count DESC
-                """, {"repo_id": repo_id})
-                
-                langs = list(result)
-                if langs:
-                    console.print("\n   [dim]File Types:[/dim]")
-                    for record in langs:
-                        lang = record["lang"] or "unknown"
-                        count = record["count"]
-                        console.print(f"   [dim]• {lang}: {count}[/dim]")
-            
-            # Show session-level statistics if multiple repos in session
-            with analyzer.neo4j_adapter.driver.session() as db_session:
-                session_repos = db_session.run("""
-                    MATCH (n {session_id: $project_id})
-                    RETURN DISTINCT n.repo_id as repo_id
-                """, {"project_id": project_id}).values()
-                
-                if len(session_repos) > 1:
-                    console.print(f"\n[bold cyan]📦 Project '{project_id}' includes {len(session_repos)} repositories:[/bold cyan]")
-                    for repo in session_repos:
-                        if repo[0]:
-                            console.print(f"   • {repo[0]}")
-                    
-                    # Total session stats
-                    result = db_session.run("""
-                        MATCH (n {session_id: $project_id})
-                        RETURN labels(n)[0] as type, count(n) as count
-                        ORDER BY type
-                    """, {"project_id": project_id})
-                    console.print(f"\n[dim]   Total across session:[/dim]")
-                    for record in result:
-                        node_type = record["type"] or "Unknown"
-                        count = record["count"]
-                        console.print(f"   [dim]• {node_type}: {count}[/dim]")
-            
-            # Check for circular dependencies (repo-specific)
-            cycles = analyzer.neo4j_adapter.detect_circular_dependencies(repo_id=repo_id)
-            if cycles:
-                console.print(f"\n[bold yellow]⚠️  Found {len(cycles)} Circular Dependencies[/bold yellow]")
-                for cycle in cycles[:5]:  # Show first 5
-                    names = [uid.split("::")[-1] for uid in cycle]
-                    console.print(f"   🔄 {' → '.join(names)}")
-                if len(cycles) > 5:
-                    console.print(f"   ... and {len(cycles) - 5} more")
-        
-        # Cleanup
-        analyzer.close()
-        
-        console.print(f"\n[dim]💡 You can now query this repository with:[/dim]")
-        console.print(f"[dim]   • yaver chat (for semantic queries)[/dim]")
-        console.print(f"[dim]   • yaver simulate <file> <function> (for impact analysis)[/dim]")
-        
-    except Exception as e:
-        console.print(f"\n[bold red]❌ Learning Failed:[/bold red] {str(e)}")
-        import traceback
-        console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
 
 def handle_simulate(args):
@@ -1971,7 +1744,7 @@ def handle_project_list(args):
             
             if not projects:
                 console.print("[yellow]No projects found. Create one with:[/yellow]")
-                console.print("[dim]  yaver learn <path> --project-id=<name>[/dim]\n")
+                console.print("[dim]  yaver analyze --type deep <path> --project-id=<name>[/dim]\n")
                 return
             
             table = Table(show_header=True, header_style="bold magenta")
