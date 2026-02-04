@@ -26,8 +26,8 @@ from .agent_base import (
     format_log_entry,
     retrieve_relevant_context,
 )
-from .config import get_config
-from .api_client import YaverClient
+from config.config import get_config
+from agents.api_client import YaverClient
 
 
 # ============================================================================
@@ -74,7 +74,7 @@ def decompose_task_with_llm(
             arch = context["architecture_analysis"]
             context_str += f"\n- Architecture: {arch.architecture_type}"
 
-    from prompts import DECOMPOSITION_PROMPT
+    from utils.prompts import DECOMPOSITION_PROMPT
 
     # Note: DECOMPOSITION_PROMPT expects {context} and {user_request}
     # It returns JSON, so we still need the parser
@@ -243,7 +243,7 @@ def execute_task_with_llm(task: Task, context: Dict) -> Dict[str, any]:
             if author != "Yaver Worker":  # Skip own auto-generated comments
                 context_str += f"- [{author}]: {content}\n"
 
-    from prompts import TASK_SOLVER_PROMPT
+    from utils.prompts import TASK_SOLVER_PROMPT
 
     # Format the prompt manually since we need to inject conditional content
     # Or better, update TASK_SOLVER_PROMPT to accept these vars

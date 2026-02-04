@@ -392,6 +392,11 @@ Examples:
     )
     new_parser.set_defaults(func=handle_new)
 
+    # Work command - Autonomous worker
+    work_parser = subparsers.add_parser("work", help="Run autonomous worker on a task")
+    work_parser.add_argument("task", help="Task description")
+    work_parser.set_defaults(func=handle_work)
+
     # Parse arguments
     args = parser.parse_args()
 
@@ -410,9 +415,57 @@ Examples:
             sys.exit(1)
         except Exception as e:
             print(f"❌ Error: {e}")
+            import traceback
+
+            traceback.print_exc()  # Print trace for debugging
             sys.exit(1)
     else:
         parser.print_help()
+
+
+def handle_work(args):
+    """Handle work command"""
+    print(f"\n🤖 Jules (Autonomous Worker) starting...")
+    print(f"   Task: {args.task}\n")
+
+    from core.autonomous_worker import AutonomousWorker
+    from tools.rag.rag_service import RAGService
+    from memory.manager import MemoryManager
+    from tools.code_analyzer.vector_store import VectorStoreFactory
+    from tools.code_analyzer.embeddings import CodeEmbedder
+    from tools.code_analyzer.neo4j_adapter import Neo4jAdapter  # Mock or Real
+    from config.config import get_config
+
+    try:
+        config = get_config()
+
+        # Initialize dependencies
+        # Note: In a real app, use Dependency Injection container
+        vector_store = VectorStoreFactory.get_instance(config.vector_db)
+        embedder = CodeEmbedder(config.ollama)
+        neo4j = Neo4jAdapter(
+            config.neo4j.uri, (config.neo4j.username, config.neo4j.password)
+        )
+
+        rag = RAGService(neo4j, vector_store, embedder, config.ollama)
+        memory = MemoryManager()
+
+        worker = AutonomousWorker(rag, memory)
+
+        from rich.console import Console
+
+        console = Console()
+
+        with console.status("[bold green]Working...[/bold green]", spinner="dots"):
+            result = worker.run(args.task)
+
+        format_response(result, title="Worker Result")
+
+    except Exception as e:
+        print(f"❌ Worker failed: {e}")
+        import traceback
+
+        traceback.print_exc()
 
 
 def handle_setup(args):

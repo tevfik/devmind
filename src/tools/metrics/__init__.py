@@ -7,6 +7,10 @@ import logging
 from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass, asdict
 
+# Import new metric calculators
+from .base import MetricCalculator
+from .complexity import MetricsManager
+
 logger = logging.getLogger(__name__)
 
 

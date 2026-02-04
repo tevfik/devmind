@@ -107,6 +107,7 @@ class VectorDBConfig(BaseSettings):
         default=100, validation_alias="EMBEDDING_BATCH_SIZE"
     )
     top_k_similar_files: int = Field(default=5, validation_alias="TOP_K_SIMILAR_FILES")
+    provider: str = Field(default="qdrant", validation_alias="VECTOR_DB_PROVIDER")
 
 
 class QdrantConfig(BaseSettings):

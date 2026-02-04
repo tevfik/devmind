@@ -89,6 +89,9 @@ class CodeQualityAgent:
         analyzer = MetricsAnalyzer(self.neo4j)
         metrics = analyzer.analyze_repository(self.project_id)
 
+        # Enrich with real static analysis
+        self._enrich_metrics(metrics)
+
         # Step 3: EVALUATE
         logger.info("[Agent] EVALUATE: Reasoning with LLM")
         from agents.decision_engine import DecisionEngine
@@ -110,6 +113,78 @@ class CodeQualityAgent:
         self._save_state()
 
         return report
+
+    def _enrich_metrics(self, metrics: Dict[str, Any]):
+        """
+        Enrich metrics with real-time static analysis using MetricsManager.
+        This provides accurate complexity scores (Radon/Lizard) vs Neo4j estimates.
+        """
+        from tools.metrics import MetricsManager, ComplexityMetric
+
+        manager = MetricsManager()
+        project_root = Path.cwd()
+
+        # We will collect new complexity metrics
+        real_metrics = []
+
+        # Iterate over all files in repo
+        # Optimization: In a real scenario, map this to files found in Neo4j to save IO
+        for file_path in project_root.rglob("*"):
+            if not file_path.is_file():
+                continue
+            if any(
+                p in str(file_path)
+                for p in [".git", "__pycache__", "venv", "node_modules"]
+            ):
+                continue
+
+            result = manager.get_metrics(file_path)
+            complexity_data = result.get("complexity")
+            lines_data = result.get("lines", {})
+
+            if complexity_data:
+                # Add complex functions found by Radon/Lizard
+                complex_funcs = complexity_data.get("complex_functions", [])
+                for func in complex_funcs:
+                    # func is typically {'name': '...', 'complexity': N, 'lineno': ...}
+                    # We adapt this to the ComplexityMetric dataclass
+                    metric = ComplexityMetric(
+                        function_id=f"{file_path.name}:{func['name']}",
+                        function_name=func["name"],
+                        file_path=str(file_path.relative_to(project_root)),
+                        complexity_score=float(func["complexity"]),
+                        loc=0,  # Detail not always avail in summary
+                        parameters=0,
+                        has_docstring=False,
+                    )
+                    real_metrics.append(metric)
+
+        # If we found real metrics, replace or merge with Neo4j estimate
+        if real_metrics:
+            logger.info(
+                f"[Agent] Enriched metrics with {len(real_metrics)} functions from Static Analysis"
+            )
+            # We prioritize real analysis.
+            # Note: This might overwrite Neo4j measurements, which is desired as Neo4j
+            # currently uses a specific approximation.
+            metrics["complexity_metrics"] = real_metrics
+
+            # Re-calculate quality score based on new numbers
+            from tools.metrics import MetricsAnalyzer
+
+            # Mocking analyzer just to access static calculation method if it was static?
+            # It's an instance method. Let's just create a temp one or copy logic.
+            # actually we can just re-use the analyzer instance from the caller if we passed it,
+            # but simpler to just instantiate light wrapper since logic is pure math.
+            # Or manually update the score dict.
+
+            # Recalculate summary stats
+            high_complexity = [m for m in real_metrics if m.complexity_score > 10]
+            metrics["summary"]["high_complexity_count"] = len(high_complexity)
+            metrics["summary"]["total_functions"] = len(real_metrics)
+            if real_metrics:
+                avg = sum(m.complexity_score for m in real_metrics) / len(real_metrics)
+                metrics["summary"]["avg_complexity"] = round(avg, 1)
 
     def _observe_changes(self) -> Dict[str, Any]:
         """Detect changes since last analysis"""

@@ -18,7 +18,10 @@ from config.config import VectorDBConfig
 logger = logging.getLogger(__name__)
 
 
-class ChromaAdapter:
+from tools.code_analyzer.vector_store import VectorStoreInterface
+
+
+class ChromaAdapter(VectorStoreInterface):
     """
     Adapter for ChromaDB Vector Database.
     """

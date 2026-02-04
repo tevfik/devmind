@@ -91,6 +91,7 @@ else:
         "typer>=0.9.0",
         # Async
         "aiohttp>=3.9.0",
+        "mcp>=0.1.0",
     ]
 
 setup(
@@ -142,4 +143,7 @@ setup(
         "assistant",
     ],
     zip_safe=False,
+    extras_require={
+        "leann": ["leann>=0.1.0"],
+    },
 )

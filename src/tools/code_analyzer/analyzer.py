@@ -21,7 +21,7 @@ from .chunker import CodeChunker
 from .qdrant_adapter import QdrantAdapter
 from .leann_adapter import LeannAdapter
 from .chroma_adapter import ChromaAdapter
-from tools.git_analyzer import GitAnalyzer
+from tools.git.client import GitClient
 from tools.rag.rag_service import RAGService
 from tools.rag.fact_extractor import FactExtractor
 from core.analysis_session import AnalysisSession
@@ -45,7 +45,7 @@ class CodeAnalyzer:
         self.parser = ASTParser()  # Keep as default python parser
         self.import_resolver = ImportResolver(self.repo_path)
         self.call_graph_builder = CallGraphBuilder()
-        self.git_analyzer = GitAnalyzer(str(self.repo_path))
+        self.git_analyzer = GitClient(str(self.repo_path))
         self.memory_config = cfg.MemoryConfig()
 
         # Parsers

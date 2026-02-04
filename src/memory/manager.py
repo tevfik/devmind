@@ -1,57 +1,147 @@
 """
-Memory Manager - Handles chat history and memory operations
-Simple implementation for storing conversation history
+Memory Manager using mem0ai
+Adapted from IntelligentAgent project.
 """
 
-from typing import List, Dict, Optional, Any
-from datetime import datetime
+import os
+import logging
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+from config.config import QdrantConfig, OllamaConfig, get_config
+
+try:
+    from mem0 import Memory
+except ImportError:
+    Memory = None
+
+logger = logging.getLogger("memory_manager")
 
 
 class MemoryManager:
-    """
-    Manages conversation history and memory operations.
-    Simple in-memory storage for chat sessions.
-    """
+    """Manages agent memory using mem0."""
 
-    def __init__(self, max_history: int = 100):
-        """Initialize memory manager"""
-        self.max_history = max_history
-        self.history: List[Dict[str, Any]] = []
-        self.metadata: Dict[str, Any] = {
-            "created_at": datetime.now().isoformat(),
-            "session_id": None,
-        }
+    def __init__(self, user_id: str = "default_user"):
+        self.user_id = user_id
+        self.memory = None
 
-    def add(self, content: str, message_type: str = "user", **kwargs):
-        """Add message to history"""
-        message = {
-            "timestamp": datetime.now().isoformat(),
-            "type": message_type,
-            "content": content,
-            **kwargs,
-        }
-        self.history.append(message)
+        # Load configuration
+        self.config = get_config()
+        self.qdrant_config = self.config.qdrant
+        self.ollama_config = self.config.ollama
 
-        # Keep history bounded
-        if len(self.history) > self.max_history:
-            self.history = self.history[-self.max_history :]
+        provider = self.config.vector_db.provider
 
-    def get_history(self) -> List[Dict[str, Any]]:
-        """Get entire history"""
-        return self.history
+        if Memory:
+            try:
+                # Configure Vector Store based on provider
+                vector_store_config = {}
 
-    def get_recent(self, count: int = 10) -> List[Dict[str, Any]]:
-        """Get recent messages"""
-        return self.history[-count:]
+                if provider == "qdrant":
+                    vector_store_config = {
+                        "provider": "qdrant",
+                        "config": {
+                            "host": self.qdrant_config.host,
+                            "port": self.qdrant_config.port,
+                            "collection_name": self.qdrant_config.collection,
+                            "embedding_model_dims": 768,
+                        },
+                    }
+                elif provider == "chroma":
+                    db_path = (
+                        Path(self.config.vector_db.chroma_persist_dir) / "mem0_chroma"
+                    )
+                    os.makedirs(db_path, exist_ok=True)
+                    vector_store_config = {
+                        "provider": "chroma",
+                        "config": {
+                            "collection_name": "yaver_memory",
+                            "path": str(db_path),
+                        },
+                    }
+                elif provider == "leann":
+                    # Fallback to Chroma for Episodic Memory even if Leann is used for Code
+                    # to keep dependencies simple for Mem0
+                    logger.info(
+                        "Using ChromaDB for Episodic Memory (LEANN selected for Code)"
+                    )
+                    db_path = (
+                        Path(self.config.vector_db.chroma_persist_dir)
+                        / "mem0_chroma_leann"
+                    )
+                    os.makedirs(db_path, exist_ok=True)
+                    vector_store_config = {
+                        "provider": "chroma",
+                        "config": {
+                            "collection_name": "yaver_memory_leann_backed",
+                            "path": str(db_path),
+                        },
+                    }
+                else:
+                    # Default
+                    vector_store_config = {
+                        "provider": "qdrant",
+                        "config": {
+                            "host": self.qdrant_config.host,
+                            "port": self.qdrant_config.port,
+                            "collection_name": self.qdrant_config.collection,
+                        },
+                    }
 
-    def clear(self):
-        """Clear all history"""
-        self.history = []
+                # Global Config
+                mem0_config = {
+                    "vector_store": vector_store_config,
+                    "llm": {
+                        "provider": "ollama",
+                        "config": {
+                            "model": self.ollama_config.model_general,
+                            "temperature": 0.1,
+                        },
+                    },
+                    "embedder": {
+                        "provider": "ollama",
+                        "config": {"model": self.ollama_config.model_embedding},
+                    },
+                }
 
-    def search(self, query: str) -> List[Dict[str, Any]]:
-        """Search history for messages containing query"""
-        return [
-            msg
-            for msg in self.history
-            if query.lower() in msg.get("content", "").lower()
-        ]
+                logger.info(
+                    f"Initializing mem0 with provider={provider}, Ollama={self.ollama_config.model_general}"
+                )
+                self.memory = Memory.from_config(mem0_config)
+                logger.info("mem0 initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize mem0: {e}")
+        else:
+            logger.warning("mem0ai package not installed")
+
+    def add(self, text: str, user_id: str = None, metadata: Dict = None):
+        """Add memory."""
+        if self.memory:
+            self.memory.add(
+                text, user_id=user_id or self.user_id, metadata=metadata or {}
+            )
+        else:
+            logger.warning("Memory not initialized, skipping add")
+
+    def search(self, query: str, user_id: str = None, limit: int = 5) -> List[Dict]:
+        """Search memory."""
+        if self.memory:
+            return self.memory.search(
+                query, user_id=user_id or self.user_id, limit=limit
+            )
+        return []
+
+    def get_all(self, user_id: str = None) -> List[Dict]:
+        """Get all memories."""
+        if self.memory:
+            return self.memory.get_all(user_id=user_id or self.user_id)
+        return []
+
+    def delete(self, memory_id: str):
+        """Delete a memory."""
+        if self.memory:
+            self.memory.delete(memory_id)
+
+    def delete_all(self, user_id: str = None):
+        """Delete all memories for user."""
+        if self.memory:
+            self.memory.delete_all(user_id=user_id or self.user_id)

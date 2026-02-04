@@ -7,15 +7,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 
-from yaver_cli.agent_base import (
+from agents.agent_base import (
     create_llm,
     print_section_header,
     print_info,
     load_file,
     retrieve_relevant_context,
 )
-from yaver_cli.config import get_config
-from utils.prompts import CODER_USER_TEMPLATE, CODER_FIX_TEMPLATE, CODER_SYSTEM_PROMPT
+from config.config import get_config
+from utils.prompts import (
+    CODER_USER_TEMPLATE,
+    CODER_FIX_TEMPLATE,
+    CODER_SYSTEM_PROMPT,
+    CODER_EDIT_TEMPLATE,
+)
 
 logger = logging.getLogger("yaver_cli")
 
@@ -106,26 +111,12 @@ class CoderAgent:
         print_section_header("Coder Agent: Editing File", "📝")
 
         system_prompt = (
-            self.system_prompt
+            CODER_SYSTEM_PROMPT
             + "\n\nYou are editing an existing file. Retain the style and structure. Return the FULL updated file content in a markdown code block."
         )
 
-        edit_template = """
-You are tasked with editing the following file: `{file_path}`
-
-INSTRUCTIONS:
-{instructions}
-
-CURRENT CONTENT:
-```
-{content}
-```
-
-Return the complete, updated file content. Wrap it in a markdown code block.
-"""
-
         prompt = ChatPromptTemplate.from_messages(
-            [("system", system_prompt), ("user", edit_template)]
+            [("system", system_prompt), ("user", CODER_EDIT_TEMPLATE)]
         )
 
         chain = prompt | self.llm | StrOutputParser()

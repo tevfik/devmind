@@ -18,7 +18,10 @@ from config.config import QdrantConfig
 logger = logging.getLogger(__name__)
 
 
-class QdrantAdapter:
+from tools.code_analyzer.vector_store import VectorStoreInterface
+
+
+class QdrantAdapter(VectorStoreInterface):
     """
     Adapter for Qdrant Vector Database.
     """

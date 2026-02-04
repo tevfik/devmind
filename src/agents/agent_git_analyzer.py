@@ -13,14 +13,14 @@ import re
 import asyncio
 
 import git
-import lizard
-from radon.complexity import cc_visit
-from radon.metrics import mi_visit
+
+# lizard and radon imports removed as they are now in tools/metrics/complexity.py
 from bandit.core import manager as bandit_manager
 from bandit.core import config as bandit_config
 
 # Import local Parser for AST extraction
 from tools.git_analysis import GraphIndexer, CodeParser
+from tools.metrics import MetricsManager
 
 from agents.agent_base import (
     YaverState,
@@ -150,98 +150,6 @@ def should_ignore_file(file_path: Path) -> bool:
     return False
 
 
-def count_lines_of_code(file_path: Path) -> Tuple[int, int, int]:
-    """Count total lines, code lines, and comment lines"""
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        total = len(lines)
-        blank = sum(1 for line in lines if line.strip() == "")
-
-        # Simple comment detection
-        comments = 0
-        for line in lines:
-            stripped = line.strip()
-            if (
-                stripped.startswith("#")
-                or stripped.startswith("//")
-                or stripped.startswith("/*")
-                or stripped.startswith("*")
-            ):
-                comments += 1
-
-        code = total - blank - comments
-        return total, code, comments
-    except Exception as e:
-        logger.warning(f"Could not count lines for {file_path}: {e}")
-        return 0, 0, 0
-
-
-def analyze_python_complexity(file_path: Path) -> Optional[Dict]:
-    """Analyze Python file complexity using radon"""
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            code = f.read()
-
-        complexity_results = cc_visit(code)
-        avg_complexity = (
-            sum(r.complexity for r in complexity_results) / len(complexity_results)
-            if complexity_results
-            else 0
-        )
-        max_complexity = max((r.complexity for r in complexity_results), default=0)
-
-        mi_results = mi_visit(code, True)
-        maintainability = mi_results if isinstance(mi_results, (int, float)) else 0
-
-        return {
-            "avg_complexity": round(avg_complexity, 2),
-            "max_complexity": max_complexity,
-            "maintainability_index": round(maintainability, 2),
-            "complex_functions": [
-                f"{r.name} (complexity: {r.complexity})"
-                for r in complexity_results
-                if r.complexity > 10
-            ],
-        }
-    except Exception as e:
-        logger.debug(f"Complexity analysis failed for {file_path}: {e}")
-        return None
-
-
-def analyze_generic_complexity(file_path: Path) -> Optional[Dict]:
-    """Analyze file using Lizard"""
-    try:
-        analysis = lizard.analyze_file(str(file_path))
-        if not analysis:
-            return None
-
-        avg_complexity = analysis.average_cyclomatic_complexity
-        max_complexity = 0
-        complex_functions = []
-
-        for func in analysis.function_list:
-            if func.cyclomatic_complexity > max_complexity:
-                max_complexity = func.cyclomatic_complexity
-            if func.cyclomatic_complexity > 10:
-                complex_functions.append(
-                    f"{func.name} (complexity: {func.cyclomatic_complexity})"
-                )
-
-        maintainability = max(0.0, 100.0 - (avg_complexity * 3.0))
-
-        return {
-            "avg_complexity": round(avg_complexity, 2),
-            "max_complexity": max_complexity,
-            "maintainability_index": round(maintainability, 2),
-            "complex_functions": complex_functions[:3],
-        }
-    except Exception as e:
-        logger.debug(f"Generic complexity analysis failed for {file_path}: {e}")
-        return None
-
-
 def analyze_file(file_path: Path, repo_root: Path) -> Optional[FileAnalysis]:
     """Analyze a single file"""
     if should_ignore_file(file_path) or not is_text_file(file_path):
@@ -251,7 +159,13 @@ def analyze_file(file_path: Path, repo_root: Path) -> Optional[FileAnalysis]:
     if language == "Unknown":
         return None
 
-    total_lines, code_lines, comment_lines = count_lines_of_code(file_path)
+    # Use MetricsManager for unified analysis
+    metrics_manager = MetricsManager()
+    metrics = metrics_manager.get_metrics(file_path)
+
+    lines = metrics.get("lines", {})
+    code_lines = lines.get("code", 0)
+
     if code_lines == 0:
         return None
 
@@ -267,20 +181,20 @@ def analyze_file(file_path: Path, repo_root: Path) -> Optional[FileAnalysis]:
     )
 
     # 1. Complexity & Security Stats
-    if language == "Python":
-        stats = analyze_python_complexity(file_path)
-        if stats:
-            analysis.complexity = stats["avg_complexity"]
-            analysis.maintainability = stats["maintainability_index"]
-            if stats["complex_functions"]:
-                analysis.suggestions.append(
-                    f"Refactor complex functions: {', '.join(stats['complex_functions'])}"
-                )
-    else:
-        stats = analyze_generic_complexity(file_path)
-        if stats:
-            analysis.complexity = stats["avg_complexity"]
-            analysis.maintainability = stats["maintainability_index"]
+    stats = metrics.get("complexity")
+    if stats:
+        analysis.complexity = stats.get("avg_complexity", 0)
+        # Default to 100 if None (e.g. Lizard doesn't provide it)
+        analysis.maintainability = stats.get("maintainability_index") or 100.0
+
+        complex_funcs = stats.get("complex_functions", [])
+        if complex_funcs:
+            # Format complex functions for suggestion
+            # complex_funcs is a list of dicts now: [{'name': '...', 'complexity': 12}, ...]
+            func_names = [f"{f['name']} ({f['complexity']})" for f in complex_funcs]
+            analysis.suggestions.append(
+                f"Refactor complex functions: {', '.join(func_names[:3])}"
+            )
 
     # 2. Extract Structural Memory (Classes, Functions) using CodeParser
     try:

@@ -8,10 +8,23 @@ import subprocess
 import json
 
 
-class GitAnalyzer:
+from tools.base import Tool
+
+
+class GitClient(Tool):
     """
-    Analyzes git repositories for commits, changes, and history
+    Analyzes git repositories for commits, changes, and history.
     """
+
+    name = "git_client"
+    description = "Read-only Git operations (status, log, diff)"
+
+    def run(self, command: str, **kwargs) -> Any:
+        """Execute git command (wrapper for methods)."""
+        method = getattr(self, command, None)
+        if method:
+            return method(**kwargs)
+        return {"error": f"Unknown command: {command}"}
 
     def __init__(self, repo_path: Optional[str] = None):
         """Initialize git analyzer"""

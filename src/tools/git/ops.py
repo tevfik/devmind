@@ -8,12 +8,22 @@ from git import Repo, Actor
 from datetime import datetime
 import requests
 import re
-from yaver_cli.config import get_config
+from config.config import get_config
+from tools.base import Tool
 
 logger = logging.getLogger("yaver_cli")
 
 
-class GitOps:
+class GitOps(Tool):
+    name = "git_ops"
+    description = "Git operations (commit, push, pr)"
+
+    def run(self, command: str, **kwargs) -> Any:
+        method = getattr(self, command, None)
+        if method:
+            return method(**kwargs)
+        return {"error": f"Unknown command: {command}"}
+
     def __init__(self, repo_path: str = "."):
         self.repo_path = repo_path
         try:

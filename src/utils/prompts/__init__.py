@@ -44,6 +44,7 @@ SHELL_EXPLAINER_PROMPT = load_prompt_template("shell_explainer.md")
 SHELL_SUGGESTER_PROMPT = load_prompt_template("shell_suggester.md")
 ERROR_FIXER_PROMPT = load_prompt_template("error_fixer.md")
 FILE_ANALYZER_PROMPT = load_prompt_template("file_analyzer.md")
+TASK_SOLVER_PROMPT = load_prompt_template("task_solver.md")
 
 # Raw templates for mixing with system prompts
 PLANNER_SYSTEM_PROMPT = load_raw_prompt("planner_system.md")
@@ -55,6 +56,7 @@ CLI_CHAT_SYSTEM_PROMPT = load_raw_prompt("cli_chat_system.md")
 PLANNER_USER_TEMPLATE = load_raw_prompt("planner_user.md")
 CODER_USER_TEMPLATE = load_raw_prompt("coder_user.md")
 CODER_FIX_TEMPLATE = load_raw_prompt("coder_fix.md")
+CODER_EDIT_TEMPLATE = load_raw_prompt("coder_edit.md")
 REVIEWER_USER_TEMPLATE = load_raw_prompt("reviewer_user.md")
 ARCHITECTURE_JSON_PROMPT = load_raw_prompt("architecture_analysis_json.md")
 
@@ -62,9 +64,14 @@ ARCHITECTURE_JSON_PROMPT = load_raw_prompt("architecture_analysis_json.md")
 CALL_GRAPH_ANALYZER_PROMPT = load_raw_prompt("call_graph_analyzer.md")
 IMPACT_ANALYZER_PROMPT = load_raw_prompt("impact_analyzer.md")
 ARCHITECTURE_QUESTIONER_PROMPT = load_raw_prompt("architecture_questioner.md")
+ENTITY_EXTRACTOR_PROMPT = load_raw_prompt("entity_extractor.md")
 
 # RAG Service Prompts
 RAG_INTENT_CLASSIFIER_PROMPT = load_raw_prompt("rag_intent_classifier.md")
 RAG_QA_ARCHITECT_PROMPT = load_raw_prompt("rag_qa_architect.md")
 CONCEPT_EXPLAINER_PROMPT = load_raw_prompt("concept_explainer.md")
 SIMILAR_CODE_FINDER_PROMPT = load_raw_prompt("similar_code_finder.md")
+QUERY_REWRITER_PROMPT = load_raw_prompt("query_rewriter.md")
+
+# Autonomous Agents
+AUTONOMOUS_WORKER_PROMPT = load_prompt_template("autonomous_worker.md")

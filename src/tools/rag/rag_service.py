@@ -13,8 +13,17 @@ from langchain_core.output_parsers import StrOutputParser
 
 from config.config import OllamaConfig
 from tools.code_analyzer.neo4j_adapter import Neo4jAdapter
-from tools.code_analyzer.qdrant_adapter import QdrantAdapter
+from tools.code_analyzer.neo4j_adapter import Neo4jAdapter
+from tools.code_analyzer.vector_store import VectorStoreInterface
 from tools.code_analyzer.embeddings import CodeEmbedder
+from utils.prompts import (
+    RAG_INTENT_CLASSIFIER_PROMPT,
+    RAG_QA_ARCHITECT_PROMPT,
+    CONCEPT_EXPLAINER_PROMPT,
+    SIMILAR_CODE_FINDER_PROMPT,
+    ENTITY_EXTRACTOR_PROMPT,
+    QUERY_REWRITER_PROMPT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +36,12 @@ class RAGService:
     def __init__(
         self,
         neo4j_adapter: Neo4jAdapter,
-        qdrant_adapter: QdrantAdapter,
+        vector_store: VectorStoreInterface,
         code_embedder: CodeEmbedder,
         config: Optional[OllamaConfig] = None,
     ):
         self.neo4j = neo4j_adapter
-        self.qdrant = qdrant_adapter
+        self.vector_store = vector_store
         self.embedder = code_embedder
         self.config = config or OllamaConfig()
 
@@ -61,52 +70,25 @@ class RAGService:
         # Prompts
         self._init_prompts()
 
-    def _load_prompt(self, filename: str) -> str:
-        """Load prompt from utils/prompts directory."""
-        # Assuming relative path from valid roots, or absolute.
-        # Let's try to locate the prompts key file relative to project root
-        # Ideally config should define this, but let's hardcode the utils/prompts location for now
-        # based on user request.
-
-        # We need to find the project root.
-        # yaver/src/tools/rag/rag_service.py -> ../../../
-        current_file = Path(__file__)
-        project_root = current_file.parent.parent.parent.parent
-        prompt_path = project_root / "src/utils/prompts" / filename
-
-        if not prompt_path.exists():
-            # Fallback for installed package structure if needed
-            # But here we are in source.
-            logger.warning(
-                f"Prompt file not found at {prompt_path}, using empty string."
-            )
-            return ""
-
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            return f.read()
-
     def _init_prompts(self):
         """Initialize LangChain prompts from files."""
+        # Prompts are already loaded by utils.prompts
+        # We just need to wrap them in ChatPromptTemplate if they are raw strings
+        # But looking at __init__.py, some are ChatPromptTemplate (load_prompt_template)
+        # and some are raw strings (load_raw_prompt).
 
-        # Intent Classification
-        intent_template = self._load_prompt("rag_intent_classifier.md")
-        self.intent_prompt = ChatPromptTemplate.from_template(intent_template)
+        # RAG prompts in __init__.py are loaded as raw strings currently.
+        # So we convert them here.
 
-        # Code Explanation
-        qa_template = self._load_prompt("rag_qa_architect.md")
-        self.qa_prompt = ChatPromptTemplate.from_template(qa_template)
-
-        # Concept Explainer
-        concept_template = self._load_prompt("concept_explainer.md")
-        self.concept_prompt = ChatPromptTemplate.from_template(concept_template)
-
-        # Similarity Analysis
-        similarity_template = self._load_prompt("similar_code_finder.md")
-        self.similarity_prompt = ChatPromptTemplate.from_template(similarity_template)
-
-        # Query Rewriter (History Context)
-        rewriter_template = self._load_prompt("query_rewriter.md")
-        self.rewriter_prompt = ChatPromptTemplate.from_template(rewriter_template)
+        self.intent_prompt = ChatPromptTemplate.from_template(
+            RAG_INTENT_CLASSIFIER_PROMPT
+        )
+        self.qa_prompt = ChatPromptTemplate.from_template(RAG_QA_ARCHITECT_PROMPT)
+        self.concept_prompt = ChatPromptTemplate.from_template(CONCEPT_EXPLAINER_PROMPT)
+        self.similarity_prompt = ChatPromptTemplate.from_template(
+            SIMILAR_CODE_FINDER_PROMPT
+        )
+        self.rewriter_prompt = ChatPromptTemplate.from_template(QUERY_REWRITER_PROMPT)
 
     def rewrite_query(self, question: str, chat_history: List[Any]) -> str:
         """
@@ -164,11 +146,8 @@ class RAGService:
                 # Better: Use LLM to extract entities
 
                 # Let's try to extract entities with LLM since we have it available
-                extraction_prompt = f"""
-                Extract relevant code entities (functions, classes, filenames) from the user question.
-                Return ONLY a comma-separated list of names. If none, return empty string.
-                Question: {question}
-                """
+                # Use centralized prompt
+                extraction_prompt = ENTITY_EXTRACTOR_PROMPT.format(question=question)
                 entities_resp = self.llm.invoke(extraction_prompt)
                 entities_text = (
                     entities_resp.content
@@ -270,14 +249,14 @@ class RAGService:
                     )
                     logger.info(f"Filtering by session_id: {session_id}")
 
-                results = self.qdrant.search(
+                results = self.vector_store.search(
                     query_vec,
                     limit=5,
                     score_threshold=0.3,
                     query_filter=filter_condition,
                 )
 
-                logger.info(f"Qdrant search returned {len(results)} results")
+                logger.info(f"Vector search returned {len(results)} results")
                 if results:
                     logger.debug(f"Top result score: {results[0].get('score', 0):.3f}")
                     context_parts.append("--- RELEVANT CODE SNIPPETS ---")

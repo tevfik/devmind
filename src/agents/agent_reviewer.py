@@ -8,7 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
 
 
-from yaver_cli.agent_base import (
+from agents.agent_base import (
     create_llm,
     print_section_header,
     print_info,
@@ -16,7 +16,7 @@ from yaver_cli.agent_base import (
     print_success,
     load_file,
 )
-from yaver_cli.config import get_config
+from config.config import get_config
 from utils.prompts import REVIEWER_USER_TEMPLATE, REVIEWER_SYSTEM_PROMPT
 
 logger = logging.getLogger("yaver_cli")

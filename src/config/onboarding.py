@@ -170,57 +170,80 @@ class YaverSetupWizard:
     def setup_memory(self) -> Dict:
         """Setup Memory (Vector Database) configuration"""
         self.print_section("Memory Configuration (Vector Database)")
-        print("Yaver uses vector database for semantic memory.")
-        print("Options:")
+        print("Yaver uses vector database for semantic memory and RAG.")
+        print("Select your Vector Backend:")
         print(
-            "  1. Qdrant (Standard): Robust, feature-rich vector database (Requires Docker)"
+            "  1. LEANN (Recommended): Graph-based, lightweight, local (Requires 'pipx inject yaver leann')"
         )
-        print(
-            "  2. LEANN (Experimental): Lightweight, local, Python-native (No Docker required)"
-        )
-        print(
-            "  3. ChromaDB (Local): Persistent local vector database (No Docker required)\n"
-        )
+        print("  2. ChromaDB: Standard local vector database")
+        print("  3. Qdrant: Robust enterprise vector database (Docker/Cloud)\n")
 
-        mem_choice = self.input_with_default("Select Memory Type (1, 2 or 3)", "1")
+        choice = self.input_with_default("Choice (1-3)", "1")
+        config = {}
 
-        if mem_choice == "2":
-            print("\n✅ Selected LEANN (Local Efficient ANN)")
-            return {"MEMORY_TYPE": "leann"}
-        elif mem_choice == "3":
-            print("\n✅ Selected ChromaDB (Local Persistent Storage)")
-            return {"MEMORY_TYPE": "chroma"}
+        if choice == "1":
+            try:
+                import leann
 
-        # Qdrant Setup
-        print("\nConfiguring Qdrant...")
-        print("Options:")
-        print("  1. Local (default): Uses local Qdrant server in Docker")
-        print("  2. Cloud: Uses Qdrant Cloud service\n")
+                print("\n✅ LEANN is installed and selected.")
+            except ImportError:
+                print("\n⚠️  LEANN is NOT installed.")
+                print("   To use LEANN, you must install it:")
+                print("   Run: pipx inject yaver leann  (if installed via pipx)")
+                print("   Or:  pip install '.[leann]'    (if developer install)\n")
+                if (
+                    self.input_with_default(
+                        "Continue with LEANN anyway? (y/n)", "y"
+                    ).lower()
+                    != "y"
+                ):
+                    return self.setup_memory()  # Retry
 
-        choice = self.input_with_default("Choice (1 or 2)", "1")
+            config["VECTOR_DB_PROVIDER"] = "leann"
+            config["MEMORY_TYPE"] = "leann"
 
-        base_config = {"MEMORY_TYPE": "qdrant"}
+        elif choice == "2":
+            print("\n✅ Selected ChromaDB")
+            config["VECTOR_DB_PROVIDER"] = "chroma"
+            config["MEMORY_TYPE"] = "chroma"
 
-        if choice == "2":
-            url = self.input_with_default(
-                "Qdrant Cloud URL",
-                "https://xxx-x-y-z-xxxxx.eu-central1-0.qdb.cloud",
+            persist_dir = self.input_with_default(
+                "Persistence directory", ".yaver/chroma_db"
             )
-            api_key = self.input_with_default("Qdrant API Key (keep it secret!)")
-            base_config.update(
-                {
-                    "QDRANT_URL": url,
-                    "QDRANT_API_KEY": api_key,
-                    "QDRANT_MODE": "cloud",
-                }
-            )
-        else:
-            url = self.input_with_default(
-                "Qdrant local server URL", "http://localhost:6333"
-            )
-            base_config.update({"QDRANT_URL": url, "QDRANT_MODE": "local"})
+            config["CHROMA_PERSIST_DIR"] = persist_dir
 
-        return base_config
+        elif choice == "3":
+            print("\n✅ Selected Qdrant")
+            config["VECTOR_DB_PROVIDER"] = "qdrant"
+            config["MEMORY_TYPE"] = "qdrant"
+
+            print("\nConfiguring Qdrant...")
+            print("Options:")
+            print("  1. Local (default): Uses local Qdrant server in Docker")
+            print("  2. Cloud: Uses Qdrant Cloud service\n")
+
+            q_choice = self.input_with_default("Choice (1 or 2)", "1")
+
+            if q_choice == "2":
+                url = self.input_with_default(
+                    "Qdrant Cloud URL",
+                    "https://xxx-x-y-z-xxxxx.eu-central1-0.qdb.cloud",
+                )
+                api_key = self.input_with_default("Qdrant API Key (keep it secret!)")
+                config.update(
+                    {
+                        "QDRANT_URL": url,
+                        "QDRANT_API_KEY": api_key,
+                        "QDRANT_MODE": "cloud",
+                    }
+                )
+            else:
+                url = self.input_with_default(
+                    "Qdrant local server URL", "http://localhost:6333"
+                )
+                config.update({"QDRANT_URL": url, "QDRANT_MODE": "local"})
+
+        return config
 
     def setup_neo4j(self) -> Dict:
         """Setup Neo4j (graph database) configuration"""
