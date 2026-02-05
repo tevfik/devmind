@@ -97,7 +97,7 @@ else:
 
 setup(
     name="yaver",
-    version="1.1.0",
+    version="1.2.0",
     author="tevfik.kadioglu",
     author_email="tevfik.kadioglu@gmail.com",
     description="Fully functional AI-powered development assistant with Qdrant, Neo4j, Ollama, LangChain",
