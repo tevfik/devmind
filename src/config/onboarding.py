@@ -219,6 +219,57 @@ class YaverSetupWizard:
             persist_dir = self.input_with_default(
                 "Persistence directory", "~/.yaver/chroma_db"
             )
+            config["CHROMA_PERSIST_DIR"] = persist_dir
+
+        return config
+
+    def setup_neo4j(self) -> Dict:
+        """Setup Graph Database configuration"""
+        self.print_section("Graph Database Configuration")
+        print("Graph database stores code structure and relationships for analysis.")
+        print("Options:")
+        print(
+            "  1. NetworkX (recommended): Pure Python, zero setup, local file storage"
+        )
+        print("  2. Neo4j (Docker): More powerful, requires Docker container")
+        print("  3. Neo4j (Remote): Connect to remote Neo4j server\n")
+
+        choice = self.input_with_default("Choice (1, 2, or 3)", "1")
+
+        if choice == "1":
+            print("\n✅ Selected NetworkX (local)")
+            persist_path = self.input_with_default(
+                "Graph persistence path", "~/.yaver/graph.pkl"
+            )
+            return {
+                "GRAPH_DB_PROVIDER": "networkx",
+                "NETWORKX_PERSIST_PATH": persist_path,
+            }
+        elif choice == "2":
+            print("\n✅ Selected Neo4j (Docker)")
+            return {
+                "GRAPH_DB_PROVIDER": "neo4j",
+                "NEO4J_URI": "bolt://localhost:7687",
+                "NEO4J_USER": "neo4j",
+                "NEO4J_PASSWORD": "yaver123",
+            }
+        elif choice == "3":
+            print("\n✅ Selected Neo4j (Remote)")
+            url = self.input_with_default("Neo4j URL", "bolt://localhost:7687")
+            user = self.input_with_default("Username", "neo4j")
+            password = self.input_with_default("Password (will not display)")
+            return {
+                "GRAPH_DB_PROVIDER": "neo4j",
+                "NEO4J_URI": url,
+                "NEO4J_USER": user,
+                "NEO4J_PASSWORD": password,
+            }
+        else:
+            # Default to NetworkX
+            return {
+                "GRAPH_DB_PROVIDER": "networkx",
+                "NETWORKX_PERSIST_PATH": "~/.yaver/graph.pkl",
+            }
 
     def setup_chromadb(self) -> Dict:
         """Setup ChromaDB (local memory) configuration"""
