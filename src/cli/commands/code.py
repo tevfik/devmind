@@ -1,11 +1,9 @@
-"""
-Yaver Code Commands
-Code analysis, visualization, and querying tools.
-"""
 import typer
 import os
 import time
 from pathlib import Path
+from enum import Enum
+from typing import List
 from ..ui import (
     console,
     print_title,
@@ -18,11 +16,42 @@ from ..ui import (
 app = typer.Typer(help="Code analysis and intelligence tools")
 
 
+class AnalysisType(str, Enum):
+    overview = "overview"
+    deep = "deep"
+    structure = "structure"
+
+
+def complete_path(ctx: typer.Context, incomplete: str) -> List[str]:
+    """Autocomplete for directories."""
+    path = Path(incomplete)
+    if not path.exists() or not path.is_dir():
+        # If incomplete is empty or not a dir, start from current dir
+        base_dir = Path(".")
+    else:
+        base_dir = path
+
+    # If user typed part of a name (e.g., "src/to"), we need "src/" as base
+    # and "to" as pattern.
+    # Typer/Click logic is a bit raw here, keeping it simple:
+    # Just list directories in the current working directory or partial match
+
+    # Simple approach: standard shell expansion logic is hard to replicate perfectly
+    # without os-specifics, but basic directory completion:
+    return [str(p) for p in Path(".").glob(f"{incomplete}*") if p.is_dir()]
+
+
 @app.command()
 def analyze(
-    path: str = typer.Argument(".", help="Path to repository"),
-    type: str = typer.Option(
-        "overview", "--type", "-t", help="Analysis type: overview, deep, structure"
+    path: str = typer.Argument(
+        ".", help="Path to repository", autocompletion=complete_path
+    ),
+    type: AnalysisType = typer.Option(
+        AnalysisType.overview,
+        "--type",
+        "-t",
+        help="Analysis type",
+        case_sensitive=False,
     ),
     incremental: bool = typer.Option(
         False, "--incremental", "-i", help="Only analyze changed files"
@@ -32,7 +61,7 @@ def analyze(
     ),
 ):
     """Analyze repository structure and code."""
-    print_title(f"Analyzing: {path}", f"Type: {type}")
+    print_title(f"Analyzing: {path}", f"Type: {type.value}")
 
     try:
         if type == "deep":
