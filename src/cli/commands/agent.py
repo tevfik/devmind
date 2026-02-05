@@ -51,3 +51,86 @@ def teach(
         console.print(f"Note: {note}")
 
     print_success("Feedback recorded!")
+
+
+@app.command()
+def work(
+    task: str = typer.Argument(..., help="Task description for the agent"),
+    project_id: str = typer.Option(
+        None, "--project-id", "-p", help="Project ID context"
+    ),
+    path: str = typer.Option(".", "--path", help="Path to repository"),
+):
+    """
+    Start an autonomous agent to work on a task.
+
+    The agent will:
+    1. Analyze the codebase (if needed)
+    2. Decompose the task into subtasks
+    3. Execute tasks iteratively (edits, git operations)
+    """
+    from pathlib import Path
+    from tools.code_analyzer.analyzer import CodeAnalyzer
+    from agents.agent_task_manager import task_manager_node, run_iteration_cycle
+    from agents.agent_base import YaverState, TaskStatus, ConfigWrapper
+
+    print_title("Autonomous Agent Worker")
+    console.print(f"[bold]Task:[/bold] {task}")
+
+    repo_path = Path(path).resolve()
+    if not repo_path.exists():
+        print_error(f"Repository path not found: {repo_path}")
+        raise typer.Exit(1)
+
+    # Initialize Context
+    console.print(f"[dim]Initializing context from {repo_path}...[/dim]")
+
+    # 1. Analyze Repo (Quick) to get stats
+    analyzer = CodeAnalyzer(project_id or "cli_worker", repo_path)
+    # Wrap in ConfigWrapper to allow attribute access (e.g. .total_files)
+    repo_info = ConfigWrapper(analyzer.analyze_structure())
+
+    # 2. Initialize State
+    state = YaverState(
+        user_request=task,
+        repo_info=repo_info,
+        iteration_count=0,
+        tasks=[],
+        log=[],
+        errors=[],
+    )
+
+    # 3. Planning Phase
+    console.print("\n[bold cyan]🤔 Planning...[/bold cyan]")
+    state = task_manager_node(state)
+
+    if not state.get("tasks"):
+        print_error("Failed to generate plan.")
+        raise typer.Exit(1)
+
+    # 4. Execution Loop
+    console.print("\n[bold cyan]⚙️  Executing...[/bold cyan]")
+
+    while True:
+        result = run_iteration_cycle(state)
+        state.update(result)
+
+        # Check termination
+        if not result.get("should_continue", False):
+            break
+
+        current_task = result.get("current_task")
+        if current_task and current_task.status == TaskStatus.FAILED:
+            # Stop mainly on failure for now to avoid cascading breaks in CLI mode
+            # In full agent mode, it might try to self-correct
+            print_error(f"Task failed: {current_task.error}")
+            break
+
+    # Summary
+    completed = len([t for t in state["tasks"] if t.status == TaskStatus.COMPLETED])
+    total = len(state["tasks"])
+
+    if completed == total:
+        print_success(f"All {total} tasks completed successfully!")
+    else:
+        console.print(f"\n[yellow]⚠️  Completed {completed}/{total} tasks.[/yellow]")

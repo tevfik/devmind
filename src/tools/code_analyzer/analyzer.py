@@ -189,6 +189,34 @@ class CodeAnalyzer:
         if self.neo4j_adapter:
             self.neo4j_adapter.close()
 
+    def analyze_structure(self) -> Dict:
+        """
+        Perform a lightweight structural analysis for the agent context.
+        Returns:
+            Dict containing repo statistics.
+        """
+        files = list(self._find_files())
+        total_files = len(files)
+        total_lines = 0
+        languages = set()
+
+        for f in files:
+            ext = f.suffix
+            if ext:
+                languages.add(ext)
+            try:
+                with open(f, "r", encoding="utf-8", errors="ignore") as file:
+                    total_lines += sum(1 for _ in file)
+            except Exception:
+                pass
+
+        return {
+            "repo_path": str(self.repo_path),
+            "total_files": total_files,
+            "total_lines": total_lines,
+            "languages": list(languages),
+        }
+
     def analyze_repository(self, incremental: bool = False, use_semantic: bool = False):
         """
         Perform full analysis of the repository.

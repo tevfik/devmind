@@ -211,6 +211,7 @@ class TaskConfig(BaseSettings):
     enable_parallel_execution: bool = Field(
         default=False, validation_alias="ENABLE_PARALLEL_EXECUTION"
     )
+    max_iterations: int = Field(default=10, validation_alias="TASK_MAX_ITERATIONS")
 
 
 class FeatureConfig(BaseSettings):

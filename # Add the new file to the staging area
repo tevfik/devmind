@@ -1,0 +1,7 @@
+   git add yaver_info.md
+
+   # Commit the changes with a message
+   git commit -m "Add yaver_info.md"
+
+   # Push the commits to the origin repository
+   git push origin master

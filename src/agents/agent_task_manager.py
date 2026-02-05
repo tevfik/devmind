@@ -4,7 +4,7 @@ Jules-like iterative development with task tracking
 """
 
 import json
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -27,7 +27,16 @@ from .agent_base import (
     retrieve_relevant_context,
 )
 from config.config import get_config
-from agents.api_client import YaverClient
+from config.config import get_config
+
+
+# Mock Client for CLI mode since api_client module is missing
+class YaverClient:
+    def add_comment(self, task_id, content, author="Yaver Worker"):
+        logger.info(f"[{author}] Comment on {task_id}: {content}")
+
+    def update_task_status(self, task_id, status):
+        logger.info(f"Task {task_id} status updated to: {status}")
 
 
 # ============================================================================
@@ -95,17 +104,42 @@ def decompose_task_with_llm(
             }
         )
 
+        if not isinstance(result, dict):
+            logger.error(f"Invalid decomposition result format (not a dict): {result}")
+            raise KeyError("subtasks")
+
+        # Map 'tasks' to 'subtasks' if LLM hallucinated the key name
+        if "tasks" in result and "subtasks" not in result:
+            result["subtasks"] = [
+                t["title"] if isinstance(t, dict) and "title" in t else str(t)
+                for t in result["tasks"]
+            ]
+            if "main_task" not in result:
+                result["main_task"] = user_request
+
+        if "subtasks" not in result:
+            logger.error(
+                f"Invalid decomposition result format (missing subtasks): {result}"
+            )
+            raise KeyError("subtasks")
+
+        if "priorities" not in result:
+            result["priorities"] = {s: "medium" for s in result["subtasks"]}
+        if "estimated_complexity" not in result:
+            result["estimated_complexity"] = "medium"
+
         print_success(f"{len(result['subtasks'])} subtasks created")
         return TaskDecomposition(**result)
 
     except Exception as e:
         logger.error(f"Task decomposition failed: {e}")
-        # Fallback to simple decomposition
+        # Fallback to simple decomposition if it's not already a Dict/BaseModel
         return TaskDecomposition(
             main_task=user_request,
             subtasks=[user_request],
             priorities={user_request: "high"},
             estimated_complexity="unknown",
+            dependencies={},
         )
 
 
@@ -352,6 +386,9 @@ def run_iteration_cycle(state: YaverState) -> dict:
 
     execution_result = execute_task_with_llm(next_task, context)
 
+    # Side Effects: Apply changes and Git Commit/Push
+    apply_execution_side_effects(next_task, execution_result, state)
+
     # Update task based on result
     if execution_result["success"]:
         tasks = update_task_status(
@@ -460,6 +497,117 @@ def execute_specific_task(state: YaverState, task_data: dict) -> dict:
         "file_analyses": state.get("file_analyses", []),
     }
 
+
+def apply_execution_side_effects(task, result, state=None):
+    """
+    Apply file changes and git operations from LLM execution result.
+    """
+    if not result or not result.get("success"):
+        return
+
+    output = result.get("output", "")
+    client = YaverClient()
+
+    # Determine repo path
+    repo_path = None
+    if hasattr(task, "repo_path") and task.repo_path:
+        repo_path = task.repo_path
+    elif state and state.get("repo_info") and state.get("repo_info").get("repo_path"):
+        repo_path = state.get("repo_info").get("repo_path")
+    else:
+        repo_path = "."
+
+    # 1. Apply Changes
+    import re
+    import os
+
+    # Regex to match ```language:filepath or ```filepath
+    pattern = r"```(?:\w+)?(?:[:\s]+)([^\n]+)\n(.*?)```"
+    matches = re.finditer(pattern, output, re.DOTALL)
+
+    changes_applied = False
+    applied_files = []
+
+    for match in matches:
+        file_path = match.group(1).strip()
+        code = match.group(2)
+        full_path = os.path.join(repo_path, file_path)
+
+        try:
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(code)
+            logger.info(f"Applied changes to {file_path}")
+            changes_applied = True
+            applied_files.append(file_path)
+        except Exception as e:
+            logger.error(f"Failed to write file {file_path}: {e}")
+            client.add_comment(
+                task.id,
+                f"❌ Failed to write file {file_path}: {e}",
+                author="Yaver Worker",
+            )
+
+    if applied_files:
+        client.add_comment(
+            task.id,
+            f"📝 Modified files:\n- " + "\n- ".join(applied_files),
+            author="Yaver Worker",
+        )
+
+    # 2. Git Commit & Push
+    try:
+        import git
+
+        try:
+            repo = git.Repo(repo_path)
+
+            if repo.is_dirty(untracked_files=True) and changes_applied:
+                repo.git.add(A=True)
+                commit_msg = f"feat: {task.title} (Task {task.id[:8]})"
+                repo.index.commit(commit_msg)
+                logger.info("Changes committed to git.")
+                client.add_comment(
+                    task.id,
+                    f"💾 Changes committed to git.\nMessage: `{commit_msg}`",
+                    author="Yaver Worker",
+                )
+
+                # Push if task mentions it
+                if "push" in task.title.lower() or "push" in task.description.lower():
+                    try:
+                        logger.info("Pushing to remote...")
+                        origin = repo.remote(name="origin")
+                        origin.push()
+                        client.add_comment(
+                            task.id,
+                            "🚀 Pushed changes to origin/main",
+                            author="Yaver Worker",
+                        )
+                    except Exception as push_err:
+                        logger.error(f"Push failed: {push_err}")
+                        client.add_comment(
+                            task.id,
+                            f"⚠️ Push failed: {push_err}",
+                            author="Yaver Worker",
+                        )
+        except Exception as e:
+            logger.warning(f"Git operation failed: {e}")
+            client.add_comment(
+                task.id, f"⚠️ Git operation failed: {e}", author="Yaver Worker"
+            )
+    except ImportError:
+        pass
+
+
+def execute_specific_task(
+    task: Task, context: Dict[str, Any], state: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    Standalone entry point for specific task execution (external).
+    """
+    state = state or {}
+
     # Init API Client
     client = YaverClient()
 
@@ -474,99 +622,7 @@ def execute_specific_task(state: YaverState, task_data: dict) -> dict:
     result = execute_task_with_llm(task, context)
 
     # Side Effects: Apply changes and Git Commit
-    if result["success"]:
-        output = result["output"]
-
-        # CRITICAL FIX: Use task.repo_path if available (from manual task or analysis)
-        # instead of always using state (which may be wrong or missing)
-        repo_path = None
-        if hasattr(task, "repo_path") and task.repo_path:
-            repo_path = task.repo_path
-            logger.info(f"Using repo_path from task: {repo_path}")
-        elif state.get("repo_info") and state.get("repo_info").get("repo_path"):
-            repo_path = state.get("repo_info").get("repo_path")
-            logger.info(f"Using repo_path from state: {repo_path}")
-        else:
-            repo_path = "."
-            logger.warning(
-                f"No repo_path found in task or state, using current directory: {repo_path}"
-            )
-
-        # We need to import helper functions.
-        # Since they are not here, we implement simplified versions or move them.
-        # For robustness, let's implement the logic here directly using the same logic as kanban_worker.
-
-        # 1. Apply Changes
-        import re
-        import os
-
-        pattern1 = r"```(?:\w+):([^\n]+)\n(.*?)```"
-        matches1 = re.finditer(pattern1, output, re.DOTALL)
-
-        changes_applied = False
-        applied_files = []
-
-        for match in matches1:
-            file_path = match.group(1).strip()
-            code = match.group(2)
-            full_path = os.path.join(repo_path, file_path)
-
-            try:
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, "w", encoding="utf-8") as f:
-                    f.write(code)
-                logger.info(f"Applied changes to {file_path}")
-                changes_applied = True
-                applied_files.append(file_path)
-            except Exception as e:
-                logger.error(f"Failed to write file {file_path}: {e}")
-                client.add_comment(
-                    task.id,
-                    f"❌ Failed to write file {file_path}: {e}",
-                    author="Yaver Worker",
-                )
-
-        if applied_files:
-            file_list = ", ".join(applied_files)
-            client.add_comment(
-                task.id,
-                f"📝 Modified files:\n- " + "\n- ".join(applied_files),
-                author="Yaver Worker",
-            )
-
-        # 2. Git Commit
-        # We assume gitpython is available as it is a dependency
-        try:
-            import git
-
-            try:
-                repo = git.Repo(repo_path)
-
-                # Create branch if we have task info
-                branch_name = f"task/{task.id[:8]}"
-
-                # Check if current branch is different, switch if needed?
-                # For now in API mode, we might want to stay on current or force branch.
-                # Let's simple check if dirty and commit to current branch for now,
-                # strictly following "execute task" instruction.
-
-                if repo.is_dirty(untracked_files=True) and changes_applied:
-                    repo.git.add(A=True)
-                    commit_msg = f"feat: {task.title} (Task {task.id[:8]})"
-                    repo.index.commit(commit_msg)
-                    logger.info("Changes committed to git.")
-                    client.add_comment(
-                        task.id,
-                        f"💾 Changes committed to git.\nMessage: `{commit_msg}`",
-                        author="Yaver Worker",
-                    )
-            except (git.InvalidGitRepositoryError, Exception) as e:
-                logger.warning(f"Git operation failed: {e}")
-                client.add_comment(
-                    task.id, f"⚠️ Git operation failed: {e}", author="Yaver Worker"
-                )
-        except ImportError:
-            pass
+    apply_execution_side_effects(task, result, state)
 
     # Update status to CONTROL explicitly via client to ensure sync
     final_status = "control" if result["success"] else "failed"
