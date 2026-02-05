@@ -71,282 +71,83 @@ def main():
 Examples:
   yaver setup              Run initial setup wizard
   yaver new myproject      Create a new Python project
-  yaver new api --type fastapi  Create FastAPI project
-  yaver docker status      Check Docker services
   yaver chat               Start interactive AI chat
-  yaver analyze --type deep Deep learn repository (AST + embeddings)
-  yaver commit             Generate commit message
-  yaver explain "command"  Explain a shell command
+  yaver work "task"        Run autonomous worker
+  yaver code analyze       Deep analyze repository
+  yaver code query "q"     Semantic search
+  yaver system status      Check system status
   yaver --version          Show version
         """,
     )
 
     # Version
-    parser.add_argument("--version", action="version", version="Yaver v1.1.0")
+    parser.add_argument("--version", action="version", version="Yaver v1.2.0")
 
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
-    # ========== CORE COMMANDS ==========
+    # ==========================================
+    # 1. CORE COMMANDS (Root Level)
+    # ==========================================
 
-    # Setup command
-    setup_parser = subparsers.add_parser("setup", help="Run initial setup wizard")
-    setup_parser.add_argument(
-        "--non-interactive", action="store_true", help="Use defaults without prompting"
-    )
-    setup_parser.set_defaults(func=handle_setup)
-
-    # Docker command
-    docker_parser = subparsers.add_parser("docker", help="Manage Docker services")
-    docker_subparsers = docker_parser.add_subparsers(
-        dest="docker_action", help="Docker action"
-    )
-    docker_subparsers.add_parser("start", help="Start services")
-    docker_subparsers.add_parser("stop", help="Stop services")
-    docker_subparsers.add_parser("status", help="Check status")
-    docker_subparsers.add_parser("logs", help="View logs")
-    docker_subparsers.add_parser("restart", help="Restart services")
-    docker_parser.set_defaults(func=handle_docker)
-
-    # Session command - Manage sessions
-    # ========== SESSION MANAGEMENT (Chat History) ==========
-    session_parser = subparsers.add_parser(
-        "session", help="Manage Yaver chat sessions with tags"
-    )
-    session_subparsers = session_parser.add_subparsers(
-        dest="session_action", help="Session action"
-    )
-
-    # session new [--name NAME] [--tag TAG [TAG ...]]
-    session_new = session_subparsers.add_parser("new", help="Create new chat session")
-    session_new.add_argument("--name", help="Session name")
-    session_new.add_argument("--tag", nargs="*", help="Tags for session")
-
-    # session list
-    session_subparsers.add_parser("list", help="List all chat sessions")
-
-    # session current
-    session_subparsers.add_parser("current", help="Show active chat session")
-
-    # session set <session_id>
-    session_set = session_subparsers.add_parser("set", help="Switch to chat session")
-    session_set.add_argument("session_id", help="Session ID to switch to")
-
-    # session tag <session_id> <tag>
-    session_tag = session_subparsers.add_parser("tag", help="Add tag to chat session")
-    session_tag.add_argument("session_id", help="Session ID")
-    session_tag.add_argument("tag", help="Tag to add")
-
-    # session delete <session_id>
-    session_delete = session_subparsers.add_parser("delete", help="Delete chat session")
-    session_delete.add_argument("session_id", help="Session ID to delete")
-    session_delete.add_argument(
-        "--force", "-f", action="store_true", help="Skip confirmation"
-    )
-
-    # session show <session_id> - Show detailed session information
-    session_show = session_subparsers.add_parser(
-        "show", help="Show detailed chat session information"
-    )
-    session_show.add_argument("session_id", help="Session ID to show")
-
-    session_parser.set_defaults(func=handle_session)
-
-    # ========== PROJECT MANAGEMENT (Learning Sessions) ==========
-    project_parser = subparsers.add_parser(
-        "project", help="Manage Yaver projects (multi-repo learning)"
-    )
-    project_subparsers = project_parser.add_subparsers(
-        dest="project_action", help="Project action"
-    )
-
-    # project list
-    project_subparsers.add_parser("list", help="List all learned projects")
-
-    # project show <project_id>
-    project_show = project_subparsers.add_parser("show", help="Show project details")
-    project_show.add_argument("project_id", help="Project ID to show")
-
-    # project delete <project_id>
-    project_delete = project_subparsers.add_parser("delete", help="Delete project")
-    project_delete.add_argument("project_id", help="Project ID to delete")
-    project_delete.add_argument(
-        "--force", "-f", action="store_true", help="Skip confirmation"
-    )
-
-    # project history <project_id>
-    project_history = project_subparsers.add_parser(
-        "history", help="Show analysis history for a project"
-    )
-    project_history.add_argument("project_id", help="Project ID")
-    project_history.add_argument(
-        "--limit", type=int, default=20, help="Number of records to show (default: 20)"
-    )
-
-    # project cleanup <project_id>
-    project_cleanup = project_subparsers.add_parser(
-        "cleanup", help="Clean old analyses for a project"
-    )
-    project_cleanup.add_argument("project_id", help="Project ID")
-    project_cleanup.add_argument(
-        "--keep-last", type=int, default=10, help="Keep last N analyses (default: 10)"
-    )
-    project_cleanup.add_argument(
-        "--force", "-f", action="store_true", help="Skip confirmation"
-    )
-
-    project_parser.set_defaults(func=handle_project)
-
-    # Status command
-    status_parser = subparsers.add_parser("status", help="Show system status")
-    status_parser.set_defaults(func=handle_status)
-
-    # ========== AI COMMANDS ==========
-
-    # Chat command - Interactive AI
+    # Chat
     chat_parser = subparsers.add_parser(
         "chat", help="Start interactive AI chat session"
     )
-    chat_parser.add_argument(
-        "--session-id", help="Use specific chat session for conversation history"
-    )
-    chat_parser.add_argument(
-        "--project-id", help="Limit code context to specific project (learned repo)"
-    )
+    chat_parser.add_argument("--session-id", help="Use specific chat session")
+    chat_parser.add_argument("--project-id", help="Limit context to project")
     chat_parser.set_defaults(func=handle_chat)
 
-    # Analyze command - Repo analysis + Deep learning
-    analyze_parser = subparsers.add_parser(
-        "analyze",
-        help="Analyze repository (overview/deep learning with AST + embeddings)",
+    # Work (Autonomous)
+    work_parser = subparsers.add_parser("work", help="Run autonomous worker on a task")
+    work_parser.add_argument("task", help="Task description")
+    work_parser.set_defaults(func=handle_work)
+
+    # New Project
+    new_parser = subparsers.add_parser("new", help="Create a new project")
+    new_parser.add_argument("name", help="Project name")
+    new_parser.add_argument(
+        "--type",
+        "-t",
+        choices=["python", "fastapi", "flask", "cli", "ml", "basic"],
+        default="python",
+        help="Project type",
+    )
+    new_parser.add_argument("--path", "-p", help="Path (default: current dir)")
+    new_parser.set_defaults(func=handle_new)
+
+    # ==========================================
+    # 2. CODE & INTELLIGENCE (Group: code)
+    # ==========================================
+    code_parser = subparsers.add_parser(
+        "code", help="Code analysis and intelligence tools"
+    )
+    code_subparsers = code_parser.add_subparsers(
+        dest="code_command", help="Code actions"
+    )
+
+    # Analyze
+    analyze_parser = code_subparsers.add_parser(
+        "analyze", help="Analyze repository structure & embedding"
     )
     analyze_parser.add_argument(
-        "path", nargs="?", default=".", help="Path to repository (default: current dir)"
+        "path", nargs="?", default=".", help="Path to repository"
     )
     analyze_parser.add_argument(
         "--type",
         choices=["overview", "structure", "impact", "detailed", "deep"],
         default="overview",
-        help="Type of analysis",
+        help="Analysis type",
     )
-    analyze_parser.add_argument(
-        "--target", help="Target function/class for impact analysis"
-    )
+    analyze_parser.add_argument("--target", help="Target function/class for impact")
     analyze_parser.add_argument(
         "--incremental", action="store_true", help="Only analyze changed files"
     )
-    analyze_parser.add_argument(
-        "--project-id", help="Project ID for storage (deep mode)"
-    )
+    analyze_parser.add_argument("--project-id", help="Project ID for storage")
     analyze_parser.set_defaults(func=handle_analyze)
 
-    # Agent command - Autonomous code quality agent
-    agent_parser = subparsers.add_parser(
-        "agent", help="Autonomous AI agent for code quality analysis"
-    )
-    agent_subparsers = agent_parser.add_subparsers(
-        dest="agent_command", help="Agent subcommands"
-    )
-
-    # Agent analyze subcommand
-    agent_analyze_parser = agent_subparsers.add_parser(
-        "analyze", help="Run autonomous analysis on a project"
-    )
-    agent_analyze_parser.add_argument(
-        "project_id", help="Project ID (learned repository)"
-    )
-    agent_analyze_parser.add_argument(
-        "--format",
-        choices=["table", "json", "chat"],
-        default="table",
-        help="Output format",
-    )
-    agent_analyze_parser.set_defaults(func=handle_agent_analyze)
-
-    # Agent status subcommand
-    agent_status_parser = agent_subparsers.add_parser(
-        "status", help="Show agent learning state"
-    )
-    agent_status_parser.add_argument("project_id", help="Project ID")
-    agent_status_parser.set_defaults(func=handle_agent_status)
-
-    # Agent history subcommand
-    agent_history_parser = agent_subparsers.add_parser(
-        "history", help="Show decision history and trends"
-    )
-    agent_history_parser.add_argument("project_id", help="Project ID")
-    agent_history_parser.add_argument(
-        "--limit", type=int, default=10, help="Number of recent decisions to show"
-    )
-    agent_history_parser.set_defaults(func=handle_agent_history)
-
-    # Agent feedback subcommand
-    agent_feedback_parser = agent_subparsers.add_parser(
-        "feedback", help="Send feedback on recommendations"
-    )
-    agent_feedback_parser.add_argument("project_id", help="Project ID")
-    agent_feedback_parser.add_argument("rec_id", help="Recommendation ID")
-    agent_feedback_parser.add_argument(
-        "--status",
-        choices=["approve", "reject", "ignore"],
-        required=True,
-        help="Feedback status",
-    )
-    agent_feedback_parser.add_argument("--note", help="Optional note for feedback")
-    agent_feedback_parser.set_defaults(func=handle_agent_feedback)
-
-    # Simulate command - Helper for impact analysis
-    simulate_parser = subparsers.add_parser("simulate", help="simulate impact analysis")
-    simulate_parser.add_argument("file", help="File to change")
-    simulate_parser.add_argument("function", help="Function to change")
-    simulate_parser.set_defaults(func=handle_simulate)
-
-    # Commit command - Generate commit message
-    commit_parser = subparsers.add_parser(
-        "commit", help="Generate commit message from staged changes"
-    )
-    commit_parser.add_argument(
-        "--context", "-c", help="Additional context for the commit message"
-    )
-    commit_parser.set_defaults(func=handle_commit)
-
-    # Explain command - Explain shell command
-    explain_parser = subparsers.add_parser(
-        "explain", help="Explain what a shell command does or analyze a file"
-    )
-    explain_parser.add_argument(
-        "command", nargs="?", help="Shell command to explain (or pipe from stdin)"
-    )
-    explain_parser.add_argument(
-        "-f", "--file", help="Explain a specific file (path to file)"
-    )
-    explain_parser.set_defaults(func=handle_explain)
-
-    # Edit command - Edit files with AI
-    edit_parser = subparsers.add_parser(
-        "edit", help="Edit a file using AI instructions"
-    )
-    edit_parser.add_argument("request", help="Instructions for editing")
-    edit_parser.add_argument("--file", "-f", required=True, help="File to edit")
-    edit_parser.set_defaults(func=handle_edit)
-
-    # Solve command - Full workflow
-    solve_parser = subparsers.add_parser(
-        "solve", help="End-to-end task solver (Branch -> Edit -> Commit)"
-    )
-    solve_parser.add_argument("task", help="Task description")
-    solve_parser.add_argument("--file", "-f", help="Target file to modify")
-    solve_parser.set_defaults(func=handle_solve)
-
-    # Fix command - Analyze and fix logs
-    fix_parser = subparsers.add_parser("fix", help="Analyze logs and suggest fixes")
-    fix_parser.add_argument(
-        "cmd_args", nargs=argparse.REMAINDER, help="Command to execute"
-    )
-    fix_parser.set_defaults(func=handle_fix)
-
-    # Visualize command
-    visualize_parser = subparsers.add_parser(
+    # Visualize
+    visualize_parser = code_subparsers.add_parser(
         "visualize", help="Visualize codebase structure"
     )
     visualize_parser.add_argument("path", help="Path to repository")
@@ -360,64 +161,187 @@ Examples:
         "--function", "-f", help="Root function for call-graph"
     )
     visualize_parser.add_argument(
-        "--output", "-o", help="Output file (e.g. diagram.md)", default="structure.md"
+        "--output", "-o", help="Output file", default="structure.md"
     )
     visualize_parser.set_defaults(func=handle_visualize)
 
-    # Suggest command - Generate shell command
-    suggest_parser = subparsers.add_parser(
-        "suggest", help="Generate shell command from natural language"
-    )
-    suggest_parser.add_argument(
-        "prompt",
-        nargs="?",
-        help="Description of what you want to do (or pipe from stdin)",
-    )
-    suggest_parser.set_defaults(func=handle_suggest)
+    # Register Query Commands (query, inspect, insights)
+    # They will be attached to code_subparsers
+    try:
+        from cli.cli_query_commands import register_query_commands
 
-    # New command - Create new project
-    new_parser = subparsers.add_parser(
-        "new", help="Create a new project with scaffolding"
-    )
-    new_parser.add_argument("name", help="Project name")
-    new_parser.add_argument(
-        "--type",
-        "-t",
-        choices=["python", "fastapi", "flask", "cli", "ml", "basic"],
-        default="python",
-        help="Project type (default: python)",
-    )
-    new_parser.add_argument(
-        "--path", "-p", help="Path where to create project (default: current directory)"
-    )
-    new_parser.set_defaults(func=handle_new)
+        register_query_commands(code_subparsers)
+    except ImportError:
+        pass
 
-    # Work command - Autonomous worker
-    work_parser = subparsers.add_parser("work", help="Run autonomous worker on a task")
-    work_parser.add_argument("task", help="Task description")
-    work_parser.set_defaults(func=handle_work)
+    # ==========================================
+    # 3. SYSTEM & INFRASTRUCTURE (Group: system)
+    # ==========================================
+    system_parser = subparsers.add_parser(
+        "system", help="System and infrastructure management"
+    )
+    system_subparsers = system_parser.add_subparsers(
+        dest="system_command", help="System actions"
+    )
 
-    # Parse arguments
+    # Setup
+    setup_parser = system_subparsers.add_parser("setup", help="Run setup wizard")
+    setup_parser.add_argument(
+        "--non-interactive", action="store_true", help="Use defaults"
+    )
+    setup_parser.set_defaults(func=handle_setup)
+
+    # Status
+    status_parser = system_subparsers.add_parser("status", help="Show system health")
+    status_parser.set_defaults(func=handle_status)
+
+    # Docker
+    docker_parser = system_subparsers.add_parser(
+        "docker", help="Manage Docker services"
+    )
+    docker_sub = docker_parser.add_subparsers(
+        dest="docker_action", help="Docker action"
+    )
+    docker_sub.add_parser("start", help="Start services")
+    docker_sub.add_parser("stop", help="Stop services")
+    docker_sub.add_parser("status", help="Check status")
+    docker_sub.add_parser("logs", help="View logs")
+    docker_sub.add_parser("restart", help="Restart services")
+    docker_parser.set_defaults(func=handle_docker)
+
+    # ==========================================
+    # 4. AGENT MANAGEMENT (Group: agent)
+    # ==========================================
+    agent_parser = subparsers.add_parser(
+        "agent", help="Manage autonomous agent learning"
+    )
+    agent_subparsers = agent_parser.add_subparsers(
+        dest="agent_command", help="Agent actions"
+    )
+
+    # Status
+    agent_status = agent_subparsers.add_parser("status", help="Show learning state")
+    agent_status.add_argument("project_id", help="Project ID")
+    agent_status.set_defaults(func=handle_agent_status)
+
+    # History
+    agent_history = agent_subparsers.add_parser("history", help="Show decision history")
+    agent_history.add_argument("project_id", help="Project ID")
+    agent_history.add_argument("--limit", type=int, default=10, help="Limit")
+    agent_history.set_defaults(func=handle_agent_history)
+
+    # Teach (Feedback) - formatted as feedback handler for now
+    agent_teach = agent_subparsers.add_parser("teach", help="Provide feedback to agent")
+    agent_teach.add_argument("project_id", help="Project ID")
+    agent_teach.add_argument("rec_id", help="Recommendation ID")
+    agent_teach.add_argument(
+        "--status", choices=["approve", "reject", "ignore"], required=True
+    )
+    agent_teach.add_argument("--note", help="Feedback note")
+    agent_teach.set_defaults(func=handle_agent_feedback)
+
+    # Analyze (Agent specific) - Keeping it as "run" or "analyze" under agent?
+    # Plan says work merges it. But let's keep it for compatibility or specific agent run.
+    # Let's keep 'analyze' under agent but maybe alias it?
+    agent_analyze = agent_subparsers.add_parser(
+        "analyze", help="Run agent analysis pass"
+    )
+    agent_analyze.add_argument("project_id", help="Project ID")
+    agent_analyze.add_argument(
+        "--format", choices=["table", "json", "chat"], default="table"
+    )
+    agent_analyze.set_defaults(func=handle_agent_analyze)
+
+    # ==========================================
+    # 5. MEMORY & SESSION (Group: memory)
+    # ==========================================
+    memory_parser = subparsers.add_parser(
+        "memory", help="Manage chat sessions and context"
+    )
+    memory_subparsers = memory_parser.add_subparsers(
+        dest="session_action", help="Memory actions"
+    )
+
+    # Re-using handle_session but defining parsers here
+    # List
+    memory_subparsers.add_parser("list", help="List sessions")
+    # Current
+    memory_subparsers.add_parser("current", help="Show active session")
+    # New
+    mem_new = memory_subparsers.add_parser("new", help="Create new session")
+    mem_new.add_argument("--name", help="Session name")
+    mem_new.add_argument("--tag", nargs="*", help="Tags")
+    # Switch (Set)
+    mem_switch = memory_subparsers.add_parser("switch", help="Switch active session")
+    mem_switch.add_argument("session_id", help="Session ID")
+    # Tag
+    mem_tag = memory_subparsers.add_parser("tag", help="Tag session")
+    mem_tag.add_argument("session_id", help="Session ID")
+    mem_tag.add_argument("tag", help="Tag")
+    # Delete
+    mem_del = memory_subparsers.add_parser("delete", help="Delete session")
+    mem_del.add_argument("session_id", help="Session ID")
+
+    memory_parser.set_defaults(func=handle_session)
+
+    # ==========================================
+    # 6. UTILITIES (Group: util)
+    # ==========================================
+    util_parser = subparsers.add_parser("util", help="Dev utilities")
+    util_subparsers = util_parser.add_subparsers(
+        dest="util_command", help="Utility tools"
+    )
+
+    # Explain
+    explain_p = util_subparsers.add_parser("explain", help="Explain command or file")
+    explain_p.add_argument("command", nargs="?", help="Command/File")
+    explain_p.add_argument("-f", "--file", help="File path")
+    explain_p.set_defaults(func=handle_explain)
+
+    # Commit
+    commit_p = util_subparsers.add_parser("commit", help="Generate commit message")
+    commit_p.add_argument("--context", "-c", help="Context")
+    commit_p.set_defaults(func=handle_commit)
+
+    # Suggest
+    suggest_p = util_subparsers.add_parser("suggest", help="Suggest shell command")
+    suggest_p.add_argument("prompt", nargs="?", help="Description")
+    suggest_p.set_defaults(func=handle_suggest)
+
+    # Edit
+    edit_p = util_subparsers.add_parser("edit", help="AI File Editor")
+    edit_p.add_argument("request", help="Edit instruction")
+    edit_p.add_argument("--file", "-f", required=True, help="File")
+    edit_p.set_defaults(func=handle_edit)
+
+    # Fix
+    fix_p = util_subparsers.add_parser("fix", help="Log analyzer & fixer")
+    fix_p.add_argument("cmd_args", nargs=argparse.REMAINDER, help="Command to run")
+    fix_p.set_defaults(func=handle_fix)
+
+    # Solve (Legacy/Advanced)
+    solve_p = util_subparsers.add_parser("solve", help="Multi-step solver")
+    solve_p.add_argument("task", help="Task")
+    solve_p.add_argument("--file", "-f", help="File")
+    solve_p.set_defaults(func=handle_solve)
+
+    # Parse
     args = parser.parse_args()
 
-    # Auto setup on first run (if running any command except setup/help/version)
-    if args.command and args.command not in ["setup"]:
+    # Special handling for 'memory switch' mapping to 'set' action expected by handle_session
+    if hasattr(args, "session_action") and args.session_action == "switch":
+        args.session_action = "set"
+
+    # Auto setup
+    if args.command and args.command not in ["setup", "system"]:
         check_and_setup_if_needed()
 
-    # Execute command
+    # Execute
     if hasattr(args, "func"):
         try:
             args.func(args)
-        except ModuleNotFoundError as e:
-            print(f"❌ Error: Module not found: {e}")
-            print("   This may indicate an installation issue.")
-            print("   Try running: pip install -e . --upgrade")
-            sys.exit(1)
         except Exception as e:
             print(f"❌ Error: {e}")
-            import traceback
-
-            traceback.print_exc()  # Print trace for debugging
             sys.exit(1)
     else:
         parser.print_help()
@@ -441,7 +365,7 @@ def handle_work(args):
 
         # Initialize dependencies
         # Note: In a real app, use Dependency Injection container
-        vector_store = VectorStoreFactory.get_instance(config.vector_db)
+        vector_store = VectorStoreFactory.get_instance(config)
         embedder = CodeEmbedder(config.ollama)
         neo4j = Neo4jAdapter(
             config.neo4j.uri, (config.neo4j.username, config.neo4j.password)
@@ -765,7 +689,7 @@ def handle_analyze(args):
     print(f"   Analysis type: {args.type}\n")
 
     try:
-        from tools.git_analyzer import GitAnalyzer
+        from tools.git.client import GitClient as GitAnalyzer
         from rich.table import Table
         from rich.panel import Panel
         from rich.console import Console
@@ -812,13 +736,13 @@ def handle_analyze(args):
             try:
                 analyzer = CodeAnalyzer(session_id, repo_path)
 
-                # Attempt connection
+                # Initialize graph database (NetworkX or Neo4j based on config)
                 try:
-                    analyzer.connect_db(neo4j_uri, (neo4j_user, neo4j_password))
-                    console.print(f"[dim]Connected to Neo4j at {neo4j_uri}[/dim]")
+                    analyzer.init_graph_db()
+                    console.print(f"[dim]Connected to graph database[/dim]")
                 except Exception as db_err:
                     console.print(
-                        f"[yellow]⚠️  Could not connect to Neo4j: {db_err}[/yellow]"
+                        f"[yellow]⚠️  Could not initialize graph database: {db_err}[/yellow]"
                     )
                     console.print(
                         f"[yellow]    Analysis will run but graph data won't be stored.[/yellow]"
@@ -1016,7 +940,7 @@ def handle_simulate(args):
         session_id = "simulation"
 
         analyzer = CodeAnalyzer(session_id, repo_path)
-        analyzer.connect_db(neo4j_uri, (neo4j_user, neo4j_password))
+        analyzer.init_graph_db()
 
         impact_analyzer = ImpactAnalyzer(analyzer.neo4j_adapter.driver)
 

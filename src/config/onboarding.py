@@ -173,46 +173,14 @@ class YaverSetupWizard:
         print("Yaver uses vector database for semantic memory and RAG.")
         print("Select your Vector Backend:")
         print(
-            "  1. LEANN (Recommended): Graph-based, lightweight, local (Requires 'pipx inject yaver leann')"
+            "  1. Qdrant (Recommended): Robust enterprise vector database (Docker/Cloud)"
         )
-        print("  2. ChromaDB: Standard local vector database")
-        print("  3. Qdrant: Robust enterprise vector database (Docker/Cloud)\n")
+        print("  2. ChromaDB: Standard local vector database\n")
 
-        choice = self.input_with_default("Choice (1-3)", "1")
+        choice = self.input_with_default("Choice (1-2)", "1")
         config = {}
 
         if choice == "1":
-            try:
-                import leann
-
-                print("\n✅ LEANN is installed and selected.")
-            except ImportError:
-                print("\n⚠️  LEANN is NOT installed.")
-                print("   To use LEANN, you must install it:")
-                print("   Run: pipx inject yaver leann  (if installed via pipx)")
-                print("   Or:  pip install '.[leann]'    (if developer install)\n")
-                if (
-                    self.input_with_default(
-                        "Continue with LEANN anyway? (y/n)", "y"
-                    ).lower()
-                    != "y"
-                ):
-                    return self.setup_memory()  # Retry
-
-            config["VECTOR_DB_PROVIDER"] = "leann"
-            config["MEMORY_TYPE"] = "leann"
-
-        elif choice == "2":
-            print("\n✅ Selected ChromaDB")
-            config["VECTOR_DB_PROVIDER"] = "chroma"
-            config["MEMORY_TYPE"] = "chroma"
-
-            persist_dir = self.input_with_default(
-                "Persistence directory", ".yaver/chroma_db"
-            )
-            config["CHROMA_PERSIST_DIR"] = persist_dir
-
-        elif choice == "3":
             print("\n✅ Selected Qdrant")
             config["VECTOR_DB_PROVIDER"] = "qdrant"
             config["MEMORY_TYPE"] = "qdrant"
@@ -243,32 +211,64 @@ class YaverSetupWizard:
                 )
                 config.update({"QDRANT_URL": url, "QDRANT_MODE": "local"})
 
+        elif choice == "2":
+            print("\n✅ Selected ChromaDB")
+            config["VECTOR_DB_PROVIDER"] = "chroma"
+            config["MEMORY_TYPE"] = "chroma"
+
+            persist_dir = self.input_with_default(
+                "Persistence directory", ".yaver/chroma_db"
+            )
+            config["CHROMA_PERSIST_DIR"] = persist_dir
+
         return config
 
     def setup_neo4j(self) -> Dict:
-        """Setup Neo4j (graph database) configuration"""
-        self.print_section("Neo4j Configuration (Graph Database)")
-        print("Neo4j stores code structure and relationships for analysis.")
+        """Setup Graph Database configuration"""
+        self.print_section("Graph Database Configuration")
+        print("Graph database stores code structure and relationships for analysis.")
         print("Options:")
-        print("  1. Docker (default): Neo4j running in Docker container")
-        print("  2. Remote: Connect to remote Neo4j server\n")
+        print(
+            "  1. NetworkX (recommended): Pure Python, zero setup, local file storage"
+        )
+        print("  2. Neo4j (Docker): More powerful, requires Docker container")
+        print("  3. Neo4j (Remote): Connect to remote Neo4j server\n")
 
-        choice = self.input_with_default("Choice (1 or 2)", "1")
+        choice = self.input_with_default("Choice (1, 2, or 3)", "1")
 
-        if choice == "2":
-            url = self.input_with_default("Neo4j URL", "neo4j://localhost:7687")
+        if choice == "1":
+            print("\n✅ Selected NetworkX (local)")
+            persist_path = self.input_with_default(
+                "Graph persistence path", "~/.yaver/graph.pkl"
+            )
+            return {
+                "GRAPH_DB_PROVIDER": "networkx",
+                "NETWORKX_PERSIST_PATH": persist_path,
+            }
+        elif choice == "2":
+            print("\n✅ Selected Neo4j (Docker)")
+            return {
+                "GRAPH_DB_PROVIDER": "neo4j",
+                "NEO4J_URI": "bolt://localhost:7687",
+                "NEO4J_USER": "neo4j",
+                "NEO4J_PASSWORD": "yaver123",
+            }
+        elif choice == "3":
+            print("\n✅ Selected Neo4j (Remote)")
+            url = self.input_with_default("Neo4j URL", "bolt://localhost:7687")
             user = self.input_with_default("Username", "neo4j")
             password = self.input_with_default("Password (will not display)")
             return {
+                "GRAPH_DB_PROVIDER": "neo4j",
                 "NEO4J_URI": url,
                 "NEO4J_USER": user,
                 "NEO4J_PASSWORD": password,
             }
         else:
+            # Default to NetworkX
             return {
-                "NEO4J_URI": "neo4j://localhost:7687",
-                "NEO4J_USER": "neo4j",
-                "NEO4J_PASSWORD": "yaver123",
+                "GRAPH_DB_PROVIDER": "networkx",
+                "NETWORKX_PERSIST_PATH": "~/.yaver/graph.pkl",
             }
 
     def setup_chromadb(self) -> Dict:
@@ -287,16 +287,6 @@ class YaverSetupWizard:
         self.print_section("Optional Services")
         config = {}
 
-        # Git settings
-        print("GitHub Integration (optional - for analyzing repositories):")
-        use_github = self.input_with_default("Enable GitHub (y/n)", "n").lower() == "y"
-        if use_github:
-            gh_token = self.input_with_default(
-                "GitHub Personal Access Token (optional)"
-            )
-            if gh_token:
-                config["GITHUB_TOKEN"] = gh_token
-
         # API settings
         print("\nAPI Server Settings:")
         api_enable = (
@@ -313,6 +303,87 @@ class YaverSetupWizard:
             "Log level (DEBUG/INFO/WARNING/ERROR)", "INFO"
         )
         config["LOG_LEVEL"] = log_level
+
+        # Forge (Remote Git) Settings
+        self.print_section("Forge Integration (Gitea/GitHub/GitLab)")
+        print("Required for remote operations (PRs, Issues, etc.)")
+        print("Yaver supports multiple hosts via ~/.yaver/hosts.json")
+
+        if (
+            self.input_with_default(
+                "Configure Forge Credential Manager? (y/n)", "n"
+            ).lower()
+            == "y"
+        ):
+            try:
+                from tools.forge.credential_manager import (
+                    CredentialManager,
+                    ForgeHostConfig,
+                )
+
+                creds = CredentialManager()
+
+                while True:
+                    print("\n--- Add New Host ---")
+                    provider = self.input_with_default(
+                        "Provider Type (gitea/github/none)", "gitea"
+                    ).lower()
+                    if provider == "none":
+                        break
+
+                    domain_or_url = self.input_with_default(
+                        "Host Domain or URL (e.g. gitea.company.com)"
+                    )
+                    if not domain_or_url:
+                        break
+
+                    # Clean domain
+                    if "://" in domain_or_url:
+                        domain = domain_or_url.split("://")[1].split("/")[0]
+                        api_url = domain_or_url  # User gave full URL
+                    else:
+                        domain = domain_or_url.split("/")[0]
+                        api_url = f"https://{domain}"  # Default to https
+
+                    if provider == "gitea":
+                        token_prompt = f"Token for {domain} (Settings -> Applications -> Generate New Token)"
+                    else:
+                        token_prompt = f"Token for {domain} (Personal Access Token)"
+
+                    token = self.input_with_default(token_prompt)
+                    owner = self.input_with_default("Default Owner (optional)")
+
+                    # Save
+                    cfg = ForgeHostConfig(
+                        provider=provider,
+                        token=token,
+                        api_url=api_url,
+                        default_owner=owner or None,
+                    )
+                    creds.save_host(domain, cfg)
+                    print(f"✅ Saved {domain} to hosts.json")
+
+                    if (
+                        self.input_with_default("Add another host? (y/n)", "n").lower()
+                        != "y"
+                    ):
+                        break
+
+            except ImportError:
+                print(
+                    "⚠️  Could not import CredentialManager. Skipping advanced setup."
+                )
+                # Fallback to simple env var setup if import fails
+                provider = self.input_with_default(
+                    "Fallback: Default Provider (gitea/github/none)", "none"
+                ).lower()
+                if provider in ["gitea", "github"]:
+                    config["FORGE_PROVIDER"] = provider
+                    config["FORGE_TOKEN"] = self.input_with_default(
+                        f"{provider.title()} Token"
+                    )
+                    if provider == "gitea":
+                        config["FORGE_URL"] = self.input_with_default("Gitea URL")
 
         return config
 
@@ -368,7 +439,8 @@ class YaverSetupWizard:
 
         categories = {
             "🔧 Ollama": ["OLLAMA_URL", "OLLAMA_MODEL"],
-            "🧠 Memory": ["MEMORY_TYPE", "QDRANT_URL", "QDRANT_MODE", "LEANN_BASE_PATH"],
+            "🧠 Memory": ["MEMORY_TYPE", "QDRANT_URL", "QDRANT_MODE"],
+            "🔗 Forge": ["FORGE_PROVIDER", "FORGE_URL", "FORGE_OWNER"],
             "📊 Neo4j": ["NEO4J_URI", "NEO4J_USER"],
             "💾 ChromaDB": ["CHROMA_PERSIST_DIR"],
         }

@@ -19,7 +19,7 @@ from .call_graph import CallGraphBuilder
 from .embeddings import CodeEmbedder
 from .chunker import CodeChunker
 from .qdrant_adapter import QdrantAdapter
-from .leann_adapter import LeannAdapter
+
 from .chroma_adapter import ChromaAdapter
 from tools.git.client import GitClient
 from tools.rag.rag_service import RAGService
@@ -56,14 +56,30 @@ class CodeAnalyzer:
         self.code_embedder = None
         self.qdrant_adapter = None
         self.chroma_adapter = None
-        self.leann_adapter = None
         self.chunker = None
 
         # RAG Component
         self.rag_service = None
 
-        # Initialize Neo4j (Lazy load or config based)
+        # Graph Database (NetworkX or Neo4j)
+        self.graph_adapter = None
         self.neo4j_adapter = None
+
+    def init_graph_db(self):
+        """Initialize graph database adapter (NetworkX or Neo4j)"""
+        if not self.graph_adapter:
+            from tools.adapter_factory import get_graph_adapter
+
+            config = cfg.get_config()
+            self.graph_adapter = get_graph_adapter(config)
+            logger.info(f"Initialized graph database: {config.graph_db.provider}")
+
+            # For backward compatibility
+            if config.graph_db.provider == "neo4j":
+                self.neo4j_adapter = self.graph_adapter
+            else:
+                # NetworkX - create minimal wrapper for compatibility
+                self.neo4j_adapter = self.graph_adapter
 
     def _init_parsers(self):
         """Initialize language parsers"""
@@ -101,10 +117,7 @@ class CodeAnalyzer:
 
     def init_semantic(self):
         """Initialize semantic analysis components (Embeddings + Vector DB)"""
-        if self.memory_config.memory_type == "leann":
-            if not self.leann_adapter:
-                self.leann_adapter = LeannAdapter(self.session_id)
-        elif self.memory_config.memory_type == "chroma":
+        if self.memory_config.memory_type == "chroma":
             if not self.code_embedder:
                 self.code_embedder = CodeEmbedder()
             if not self.chroma_adapter:
@@ -144,16 +157,7 @@ class CodeAnalyzer:
         """
         self.init_semantic()
         try:
-            if self.memory_config.memory_type == "leann":
-                # Leann uses text query
-                return self.leann_adapter.search(
-                    source_code,
-                    limit=limit,
-                    score_threshold=threshold,
-                    # We might pass default filters if needed, but session is handled by adapter path
-                    query_filter={"session_id": self.session_id},
-                )
-            elif self.memory_config.memory_type == "chroma":
+            if self.memory_config.memory_type == "chroma":
                 vector = self.code_embedder.embed_query(source_code)
                 # Chroma uses 'where' filter
                 return self.chroma_adapter.search(
@@ -406,13 +410,10 @@ class CodeAnalyzer:
                 items_to_embed.append(payload)
 
             if items_to_embed:
-                if self.memory_config.memory_type == "leann":
-                    self.leann_adapter.store_embeddings(items_to_embed)
-                else:
-                    # Generate embeddings (will use 'content' key by default in our embedder logic)
-                    embedded_items = self.code_embedder.embed_code_batch(items_to_embed)
-                    # Store in Qdrant
-                    self.qdrant_adapter.store_embeddings(embedded_items)
+                # Generate embeddings (will use 'content' key by default in our embedder logic)
+                embedded_items = self.code_embedder.embed_code_batch(items_to_embed)
+                # Store in Qdrant
+                self.qdrant_adapter.store_embeddings(embedded_items)
 
         except Exception as e:
             logger.error(f"Semantic analysis failed for {file_path}: {e}")

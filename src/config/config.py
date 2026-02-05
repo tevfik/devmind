@@ -127,16 +127,6 @@ class QdrantConfig(BaseSettings):
     use_local: bool = Field(default=False, validation_alias="QDRANT_USE_LOCAL")
 
 
-class LeannConfig(BaseSettings):
-    """Leann vector database configuration (experimental)"""
-
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
-    # Base path for storing indexes. If None, defaults to ~/.yaver/leann_indexes
-    base_path: Optional[str] = Field(default=None, validation_alias="LEANN_BASE_PATH")
-
-
 class Neo4jConfig(BaseSettings):
     """Neo4j graph database configuration"""
 
@@ -146,8 +136,22 @@ class Neo4jConfig(BaseSettings):
         extra="ignore",
     )
     uri: str = Field(default="bolt://localhost:7687", validation_alias="NEO4J_URI")
-    username: str = Field(default="neo4j", validation_alias="NEO4J_USERNAME")
+    user: str = Field(default="neo4j", validation_alias="NEO4J_USER")
     password: str = Field(default="password", validation_alias="NEO4J_PASSWORD")
+
+
+class GraphDBConfig(BaseSettings):
+    """Graph database configuration"""
+
+    model_config = SettingsConfigDict(
+        env_file=(".env", str(Path.home() / ".yaver" / ".env")),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+    provider: str = Field(default="networkx", validation_alias="GRAPH_DB_PROVIDER")
+    networkx_persist_path: str = Field(
+        default="~/.yaver/graph.pkl", validation_alias="NETWORKX_PERSIST_PATH"
+    )
 
 
 class MemoryConfig(BaseSettings):
@@ -263,6 +267,7 @@ class YaverConfig(BaseSettings):
     vector_db: VectorDBConfig = Field(default_factory=VectorDBConfig)
     qdrant: QdrantConfig = Field(default_factory=QdrantConfig)
     neo4j: Neo4jConfig = Field(default_factory=Neo4jConfig)
+    graph_db: GraphDBConfig = Field(default_factory=GraphDBConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
@@ -301,6 +306,15 @@ def reload_config() -> YaverConfig:
     return get_config()
 
 
+# Export flat config for easier access in tools
+_c = get_config()
+FORGE_PROVIDER = os.getenv("FORGE_PROVIDER", "none")
+FORGE_URL = os.getenv("FORGE_URL", "")
+FORGE_TOKEN = os.getenv("FORGE_TOKEN", "")
+FORGE_OWNER = os.getenv("FORGE_OWNER", "")
+FORGE_REPO = os.getenv("FORGE_REPO", "")
+
+
 if __name__ == "__main__":
     # Test configuration loading
     config = get_config()
@@ -309,3 +323,4 @@ if __name__ == "__main__":
     print(f"General Model: {config.ollama.model_general}")
     print(f"Code Model: {config.ollama.model_code}")
     print(f"Output Directory: {config.project.default_output_dir}")
+    print(f"Forge Provider: {FORGE_PROVIDER}")
