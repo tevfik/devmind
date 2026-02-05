@@ -74,3 +74,7 @@ docs/_build/
 temp_docs/
 !temp_docs/.gitignore
 !temp_docs/README.md
+
+# Test temporary files
+tests/integration/dummy_project/
+tests/integration/*.sh
