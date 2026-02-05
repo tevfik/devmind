@@ -222,10 +222,16 @@ class RAGService:
                             )  # Limit relations
                         context_parts.append(node_desc + "\n")
                 else:
-                    logger.info("No structural matches found.")
+                    logger.info(
+                        "No structural matches found. Falling back to semantic search."
+                    )
+                    # Fallback to semantic search by enabling the semantic block
+                    strategy = "SEMANTIC"
 
             except Exception as e:
                 logger.error(f"Structural retrieval failed: {e}")
+                # Fallback on error
+                strategy = "SEMANTIC"
 
         # 2. Semantic Retrieval (Qdrant)
         if strategy in ["SEMANTIC", "HYBRID"]:
