@@ -3,7 +3,7 @@ Tool Registry
 Manages available tools for the Autonomous Worker.
 """
 
-from typing import Dict, List, Type
+from typing import Dict, List, Type, Any
 from tools.base import Tool
 from tools.filesystem.rw import FileReadTool, FileWriteTool, FileEditTool
 from tools.system.shell import ShellTool
@@ -27,7 +27,13 @@ class ToolRegistry:
         self.register(FileEditTool())
         self.register(ShellTool())
         self.register(GitClient())
+        self.register(GitClient())
         self.register(AnalysisEngine())
+        try:
+            from tools.forge.tool import ForgeTool
+            self.register(ForgeTool())
+        except ImportError:
+            pass # Config might not be ready
 
     def register(self, tool: Tool):
         """Register a helper."""

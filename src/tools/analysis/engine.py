@@ -44,6 +44,14 @@ class RepoManager:
         return {"path": str(target_path), "type": "cloned"}
 
 
+from pydantic import BaseModel, Field
+
+
+class AnalysisEngineSchema(BaseModel):
+    repo_source: str = Field(".", description="Path to repository (default: current dir)")
+    analysis_type: str = Field("overview", description="Type: 'overview', 'structure', 'graph_index'")
+
+
 class AnalysisEngine(Tool):
     """
     Main entry point for static analysis.
@@ -52,6 +60,7 @@ class AnalysisEngine(Tool):
 
     name = "analysis_engine"
     description = "Static analysis engine (overview, structure, impact)"
+    args_schema = AnalysisEngineSchema
 
     def __init__(self):
         self.repo_manager = RepoManager()
@@ -59,12 +68,9 @@ class AnalysisEngine(Tool):
         self.graph_indexer = GraphIndexer()
         self.impact_analyzer = ImpactAnalyzer()
 
-    def run(self, command: str = "analyze", **kwargs) -> Any:
+    def run(self, repo_source: str = ".", analysis_type: str = "overview", **kwargs) -> Any:
         # Wrapper to make it look like a Tool execution
-        if command == "analyze":
-            return self.analyze(**kwargs)
-        else:
-            return {"error": f"Unknown command: {command}"}
+        return self.analyze(repo_source, analysis_type, **kwargs)
 
     def analyze(
         self,

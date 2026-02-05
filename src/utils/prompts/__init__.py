@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 PROMPTS_DIR = Path(__file__).parent
 
@@ -74,4 +74,16 @@ SIMILAR_CODE_FINDER_PROMPT = load_raw_prompt("similar_code_finder.md")
 QUERY_REWRITER_PROMPT = load_raw_prompt("query_rewriter.md")
 
 # Autonomous Agents
-AUTONOMOUS_WORKER_PROMPT = load_prompt_template("autonomous_worker.md")
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+# Autonomous Agents
+_worker_content = load_raw_prompt("autonomous_worker.md")
+# Trigger update
+AUTONOMOUS_WORKER_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _worker_content),
+        MessagesPlaceholder(variable_name="chat_history", optional=True),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ]
+)

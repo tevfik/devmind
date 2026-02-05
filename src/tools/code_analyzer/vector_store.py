@@ -77,11 +77,13 @@ class VectorStoreFactory:
         Returns:
             VectorStoreInterface: The configured adapter.
         """
+
         # Avoid circular imports by importing here
         from tools.code_analyzer.qdrant_adapter import QdrantAdapter
         from tools.code_analyzer.chroma_adapter import ChromaAdapter
-        from tools.code_analyzer.leann_adapter import LeannAdapter
-        from config.config import Config  # Assuming main config has the provider
+        from tools.code_analyzer.chroma_adapter import ChromaAdapter
+
+        from config.config import get_config
 
         # If config is passed, use it. Otherwise load default.
         # Check environment or config for provider
@@ -90,15 +92,27 @@ class VectorStoreFactory:
         provider = os.getenv("VECTOR_DB_PROVIDER", "qdrant").lower()
 
         # Override if config object has it
-        if config and hasattr(config, "vector_db_provider"):
-            provider = config.vector_db_provider
+        if config:
+            if hasattr(config, "provider"):
+                provider = config.provider
+            elif hasattr(config, "vector_db") and hasattr(config.vector_db, "provider"):
+                provider = config.vector_db.provider
 
-        if provider == "leann":
-            return LeannAdapter(config)
-        elif provider == "chroma":
+        if provider == "chroma":
+            # ChromaAdapter expects full config or specific? Let's assume specific for now or handle inside.
+
+            # But ChromaAdapter usually uses config.vector_db.chroma_persist_dir 
+            # Let's check dependency. For now pass full config if it can handle it, or specific if needed.
+            # config.vector_db has persist dir.
             return ChromaAdapter(config)
         elif provider == "qdrant":
-            return QdrantAdapter(config)
+            qdrant_config = config
+            if hasattr(config, "qdrant"):
+                qdrant_config = config.qdrant
+            return QdrantAdapter(qdrant_config)
         else:
             # Default to Qdrant
-            return QdrantAdapter(config)
+            qdrant_config = config
+            if hasattr(config, "qdrant"):
+                qdrant_config = config.qdrant
+            return QdrantAdapter(qdrant_config)

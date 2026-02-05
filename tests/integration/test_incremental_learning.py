@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from tools.code_analyzer.analyzer import CodeAnalyzer
 from tools.code_analyzer.cache_manager import CachingManager
-from tools.git_analyzer import GitAnalyzer
+from tools.git.client import GitClient as GitAnalyzer
 
 SAMPLE_REPO = Path("tests/data/incremental_repo")
 
@@ -25,7 +25,7 @@ def setup_incremental_repo():
         shutil.rmtree(SAMPLE_REPO)
 
 
-@patch("tools.code_analyzer.analyzer.GitAnalyzer")
+@patch("tools.code_analyzer.analyzer.GitClient")
 @patch("tools.code_analyzer.analyzer.Neo4jAdapter")
 def test_incremental_analysis(mock_neo4j, mock_git_cls, setup_incremental_repo):
     """

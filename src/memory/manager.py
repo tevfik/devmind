@@ -58,25 +58,16 @@ class MemoryManager:
                             "path": str(db_path),
                         },
                     }
-                elif provider == "leann":
-                    # Fallback to Chroma for Episodic Memory even if Leann is used for Code
-                    # to keep dependencies simple for Mem0
-                    logger.info(
-                        "Using ChromaDB for Episodic Memory (LEANN selected for Code)"
-                    )
-                    db_path = (
-                        Path(self.config.vector_db.chroma_persist_dir)
-                        / "mem0_chroma_leann"
-                    )
-                    os.makedirs(db_path, exist_ok=True)
+                else:
+                    # Default
                     vector_store_config = {
-                        "provider": "chroma",
+                        "provider": "qdrant",
                         "config": {
-                            "collection_name": "yaver_memory_leann_backed",
-                            "path": str(db_path),
+                            "host": self.qdrant_config.host,
+                            "port": self.qdrant_config.port,
+                            "collection_name": self.qdrant_config.collection,
                         },
                     }
-                else:
                     # Default
                     vector_store_config = {
                         "provider": "qdrant",

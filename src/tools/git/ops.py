@@ -66,12 +66,44 @@ class GitOps(Tool):
             logger.error(f"Git commit error: {e}")
 
     def push_changes(self, branch_name: str) -> bool:
-        """Pushes the branch to remote."""
+        """Pushes the branch to remote, injecting token if available for HTTPS."""
         if not self.repo:
             return False
+            
         try:
+            # 1. Get raw remote URL
             origin = self.repo.remote(name="origin")
-            origin.push(branch_name)
+            remote_url = origin.url
+            
+            # 2. Check for Token via CredentialManager
+            auth_url = None
+            try:
+                from tools.forge.credential_manager import CredentialManager
+                creds = CredentialManager()
+                host = creds.detect_host_from_url(remote_url)
+                
+                if host and remote_url.startswith("https://"):
+                    config = creds.get_host_config(host)
+                    if config and config.token:
+                        # Construct URL: https://<TOKEN>@domain/owner/repo.git
+                        # Note: remote_url is like https://domain/owner/repo.git
+                        # We strip https:// and prepend https://token@
+                        clean_url = remote_url.replace("https://", "", 1)
+                        auth_url = f"https://{config.token}@{clean_url}"
+                        logger.info(f"Using authenticated push for host: {host}")
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"Credential lookup failed: {e}")
+
+            # 3. Push
+            if auth_url:
+                # Use git command directly for custom URL push
+                self.repo.git.push(auth_url, branch_name)
+            else:
+                # Standard push (SSH or unauthenticated)
+                origin.push(branch_name)
+                
             logger.info(f"Pushed branch {branch_name} to origin")
             return True
         except Exception as e:

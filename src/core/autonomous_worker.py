@@ -8,7 +8,18 @@ from typing import List, Dict, Any, Optional
 
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+try:
+    from langchain.agents import create_tool_calling_agent, AgentExecutor
+except ImportError:
+    try:
+        from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
+    except ImportError:
+        # If both fail, we might be on a very new version or very old one.
+        # Check if we can find them in langgraph or elsewhere (future proofing)
+        import logging
+        logging.getLogger(__name__).warning("Could not import standard agents, trying legacy/classic paths.")
+        raise
+
 from langchain_core.messages import SystemMessage
 
 from config.config import get_config
@@ -95,7 +106,7 @@ class AutonomousWorker:
             output = f"I am in Planner mode (Tool Calling unavailable).\nContext found: {len(context)} chars.\n\nPlan:\nTODO"
 
         # Save to Memory
-        self.memory.add_memory(
+        self.memory.add(
             f"Task: {task}\nResult: {output}", metadata={"type": "task_execution"}
         )
 

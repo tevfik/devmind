@@ -92,6 +92,7 @@ else:
         # Async
         "aiohttp>=3.9.0",
         "mcp>=0.1.0",
+        "requests>=2.31.0",
     ]
 
 setup(

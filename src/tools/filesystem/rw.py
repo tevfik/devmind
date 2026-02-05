@@ -8,9 +8,17 @@ from typing import Any, Dict
 from tools.base import Tool
 
 
+from pydantic import BaseModel, Field
+
+
+class FileReadSchema(BaseModel):
+    path: str = Field(..., description="Absolute path to the file to read")
+
+
 class FileReadTool(Tool):
     name = "file_read"
     description = "Read file content"
+    args_schema = FileReadSchema
 
     def run(self, path: str, **kwargs) -> Any:
         try:
@@ -20,9 +28,15 @@ class FileReadTool(Tool):
             return f"Error reading file {path}: {e}"
 
 
+class FileWriteSchema(BaseModel):
+    path: str = Field(..., description="Absolute path to the file to write")
+    content: str = Field(..., description="Content to write")
+
+
 class FileWriteTool(Tool):
     name = "file_write"
     description = "Write content to file (overwrite)"
+    args_schema = FileWriteSchema
 
     def run(self, path: str, content: str, **kwargs) -> Any:
         try:
@@ -34,9 +48,16 @@ class FileWriteTool(Tool):
             return f"Error writing to {path}: {e}"
 
 
+class FileEditSchema(BaseModel):
+    path: str = Field(..., description="Absolute path to the file to edit")
+    old_text: str = Field(..., description="Exact text to replace")
+    new_text: str = Field(..., description="New text")
+
+
 class FileEditTool(Tool):
     name = "file_edit"
     description = "Replace string in file"
+    args_schema = FileEditSchema
 
     def run(self, path: str, old_text: str, new_text: str, **kwargs) -> Any:
         try:
@@ -44,7 +65,8 @@ class FileEditTool(Tool):
                 content = f.read()
 
             if old_text not in content:
-                return f"Error: '{old_text}' not found in {path}"
+                # Fuzzy match attempt or helpful error
+                return f"Error: '{old_text}' not found in {path}. Please Ensure you use exact unique substring."
 
             new_content = content.replace(old_text, new_text)
 

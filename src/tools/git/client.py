@@ -3,12 +3,15 @@ Git Analyzer - Analyzes git repositories
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Optional, Dict, List, Any
 import subprocess
-import json
-
-
+from pydantic import BaseModel, Field
 from tools.base import Tool
+
+
+class GitClientSchema(BaseModel):
+    command: str = Field(..., description="Git operation: 'status', 'log', 'branch', 'diff', 'ls'")
+    arg: Optional[str] = Field(None, description="Optional argument (e.g. commit hash for diff)")
 
 
 class GitClient(Tool):
@@ -17,14 +20,49 @@ class GitClient(Tool):
     """
 
     name = "git_client"
-    description = "Read-only Git operations (status, log, diff)"
+    description = "Read-only Git operations (status, log, diff, ls)"
+    args_schema = GitClientSchema
 
-    def run(self, command: str, **kwargs) -> Any:
+    def run(self, command: str, arg: Optional[str] = None, **kwargs) -> Any:
         """Execute git command (wrapper for methods)."""
-        method = getattr(self, command, None)
+        mapping = {
+            "status": "get_status",
+            "log": "get_commits",
+            "branch": "get_branch",
+            "diff": "get_changed_files_since",
+            "ls": "list_files",
+        }
+        
+        method_name = mapping.get(command, command)
+        method = getattr(self, method_name, None)
+        
         if method:
-            return method(**kwargs)
+            # Fix for diff without args
+            if command == "diff":
+                if arg:
+                    return method(arg)
+                return self.get_status() # Fallback to status if no commit hash
+            
+            return method()
+            
         return {"error": f"Unknown command: {command}"}
+
+    def list_files(self) -> List[str]:
+        """List tracked files."""
+        if not self.is_git_repo:
+            # Fallback to os walk
+            return [str(p) for p in self.repo_path.rglob("*") if p.is_file() and ".git" not in str(p)]
+        
+        try:
+            result = subprocess.run(
+                ["git", "ls-files"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout.splitlines()
+        except Exception:
+            return []
 
     def __init__(self, repo_path: Optional[str] = None):
         """Initialize git analyzer"""
@@ -151,3 +189,21 @@ class GitClient(Tool):
             return list(remotes)
         except Exception:
             return []
+
+    def get_remote_url(self, remote: str = "origin") -> Optional[str]:
+        """Get URL for a specific remote."""
+        if not self.is_git_repo:
+            return None
+            
+        try:
+            result = subprocess.run(
+                ["git", "remote", "get-url", remote],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return None
+        except Exception:
+            return None

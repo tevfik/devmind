@@ -16,6 +16,8 @@ class Tool(ABC):
     name: str = "base_tool"
     description: str = "Base tool description"
 
+    args_schema: Optional[type[BaseModel]] = None
+
     @abstractmethod
     def run(self, **kwargs) -> Any:
         """
@@ -26,10 +28,12 @@ class Tool(ABC):
     def to_langchain_tool(self):
         """
         Convert to LangChain compatible tool.
-        (Optional, for future integration)
         """
-        from langchain_core.tools import Tool as LangChainTool
+        from langchain_core.tools import StructuredTool
 
-        return LangChainTool(
-            name=self.name, func=self.run, description=self.description
+        return StructuredTool.from_function(
+            func=self.run,
+            name=self.name,
+            description=self.description,
+            args_schema=self.args_schema,
         )

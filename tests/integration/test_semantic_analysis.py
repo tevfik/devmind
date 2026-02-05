@@ -37,7 +37,7 @@ class MyClass:
 @patch("tools.code_analyzer.analyzer.CodeEmbedder")
 @patch("tools.code_analyzer.analyzer.QdrantAdapter")
 @patch("tools.code_analyzer.analyzer.Neo4jAdapter")
-@patch("tools.code_analyzer.analyzer.GitAnalyzer")
+@patch("tools.code_analyzer.analyzer.GitClient")
 def test_semantic_analysis_flow(
     mock_git, mock_neo4j, mock_qdrant_cls, mock_embedder_cls, setup_semantic_repo
 ):

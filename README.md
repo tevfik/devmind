@@ -1,171 +1,186 @@
 # Yaver AI
 
-AI-powered CLI development assistant built on Ollama. Provides intelligent code analysis, command suggestions, error fixes, and git repository analysis through a command-line interface.
+**AI-powered development assistant with autonomous capabilities**
 
-## Documentation
+Yaver is a CLI tool that combines deep code analysis, semantic search, and autonomous task execution to help you understand and improve your codebase.
 
-- [Quick Start](docs/QUICK_START.md) - Get up and running in minutes
-- [Installation Guide](docs/INSTALLATION.md) - Detailed installation instructions
-- [CLI Reference](docs/CLI_REFERENCE.md) - Complete command reference
-- [Architecture](docs/MEMORY_ARCH.md) - System architecture and memory design
-- [Docker Integration](docs/DOCKER_INTEGRATION.md) - Using Yaver with Docker
-- [Contributing](docs/CONTRIBUTING.md) - Guide for contributors
-- [Deep Analysis Guide](docs/DEEP_ANALYSIS_GUIDE.md) - Understanding the analysis engine
+## ✨ Features
 
-## Features
+- 🤖 **Autonomous Task Execution** - Give it a task, it plans and executes
+- 💬 **Interactive Code Chat** - Ask questions about your codebase in natural language
+- 🔍 **Deep Code Analysis** - AST parsing + Graph database + Semantic embeddings
+- 🔗 **Forge Integration** - Gitea/GitHub PR and issue management
+- 🧠 **Multi-Backend Memory** - Qdrant (primary) or ChromaDB for vector storage
+- 📊 **Code Intelligence** - Complexity analysis, impact simulation, architecture visualization
 
-- **Chat**: Interactive conversation about code
-- **Commit Messages**: Generate professional commit messages
-- **Code Explanation**: Understand shell commands and code snippets
-- **Command Suggestions**: Get relevant commands based on intent
-- **Code Editing**: AI-assisted code modifications
-- **Error Analysis**: Debug errors from logs and stack traces
-- **Git Analysis**: Repository intelligence and insights
-- **Docker Support**: Container command assistance
-- **Beautiful Output**: Rich terminal formatting with syntax highlighting
-- **Local Processing**: Runs on Ollama, no cloud dependencies
+## 🚀 Quick Start
 
-## Key Specifications
+```bash
+# 1. Install
+pip install -e .
 
-- **44 Python modules** across 9,000+ lines of code
-- **12 CLI commands** with full test coverage (20/20 passing)
-- **Rich terminal UI** with markdown rendering and color support
-- **Modular architecture** with pluggable agents and tools
+# 2. Setup (interactive wizard)
+yaver setup
 
-## Installation
+# 3. Start services (Docker)
+cd docker && docker-compose up -d
 
-### Requirements
+# 4. Use
+yaver chat                          # Interactive chat
+yaver work "Add logging to auth"    # Autonomous task
+yaver code analyze .                # Deep analysis
+```
 
-- Python 3.10 or higher
-- Ollama with `nemotron-3-nano:30b` model
-- Docker (optional, for container operations)
+## 📋 Commands
 
-### Setup
+### Core
+- `yaver chat` - Interactive AI chat with codebase context
+- `yaver work <task>` - Autonomous task execution with tools
+- `yaver new <name>` - Scaffold new project
+
+### Code Analysis
+- `yaver code analyze [--type deep]` - Analyze repository (AST + Graph + Embeddings)
+- `yaver code query <question>` - Semantic search across codebase
+- `yaver code inspect <file>` - Detailed file analysis
+- `yaver code insights` - Quality metrics and recommendations
+- `yaver code visualize` - Generate architecture diagrams
+
+### System Management
+- `yaver system status` - Check all services (Ollama, Qdrant, Neo4j)
+- `yaver system setup` - Run configuration wizard
+- `yaver docker [start|stop|status]` - Manage Docker services
+
+### Agent & Memory
+- `yaver agent status` - View agent learning state
+- `yaver agent history` - Decision history
+- `yaver memory [list|switch|new]` - Session management
+
+### Utilities
+- `yaver commit` - Generate commit messages
+- `yaver explain <code>` - Explain code or commands
+
+## 📚 Documentation
+
+- [Quick Start Guide](docs/QUICK_START.md) - Get running in 5 minutes
+- [Installation Guide](docs/INSTALLATION.md) - Detailed setup instructions
+- [CLI Reference](docs/CLI_GUIDE.md) - Complete command reference
+- [Architecture](docs/ARCHITECTURE.md) - System design and components
+- [Deep Analysis](docs/DEEP_ANALYSIS_GUIDE.md) - Understanding the analysis engine
+- [Contributing](docs/CONTRIBUTING.md) - Development guidelines
+
+## 🏗️ Architecture
+
+```
+Yaver AI
+├── AutonomousWorker (LangChain Agent + Tool Calling)
+├── RAG Service (Neo4j Graph + Qdrant Vectors)
+├── Memory Manager (Mem0 + Qdrant)
+├── Tool Registry (File, Git, Shell, Forge, Analysis)
+└── CLI (Rich Terminal UI)
+```
+
+**Supported Backends:**
+- **LLM**: Ollama (local)
+- **Vector DB**: Qdrant (primary), ChromaDB (fallback)
+- **Graph DB**: Neo4j
+- **Memory**: Mem0 with Qdrant/ChromaDB
+
+## 🧪 Testing
+
+```bash
+pytest                    # Run all tests
+pytest tests/unit         # Unit tests only
+pytest tests/integration  # Integration tests
+```
+
+**Status**: ✅ 46/46 tests passing
+
+## 🔧 Requirements
+
+- Python 3.10+
+- Docker (for Qdrant, Neo4j, Ollama)
+- Git
+
+## 📦 Installation
 
 ```bash
 # Clone repository
 git clone https://github.com/tevfik/yaver.git
 cd yaver
 
-# Install via pipx (recommended)
-pipx install -e .
-
-# Or use virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# Install with virtual environment (recommended)
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
+
+# Or install with pipx
+pipx install -e .
 ```
 
-### Configuration
+## ⚙️ Configuration
+
+Run the interactive setup wizard:
 
 ```bash
 yaver setup
 ```
 
-Creates `~/.yaver/config.json` with:
-- `OLLAMA_URL`: Ollama endpoint (default: http://localhost:11434)
-- `OLLAMA_MODEL`: LLM model (default: nemotron-3-nano:30b)
-- Docker configuration (optional)
+This creates `~/.yaver/config.json` with:
+- Ollama URL and models
+- Qdrant/ChromaDB configuration
+- Neo4j credentials
+- Forge (Gitea/GitHub) tokens
 
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `yaver setup` | Initial configuration |
-| `yaver chat` | Interactive chat |
-| `yaver commit` | Generate commit messages |
-| `yaver explain` | Explain commands and code |
-| `yaver suggest` | Command suggestions |
-| `yaver edit` | Code editing assistance |
-| `yaver solve` | Problem solving |
-| `yaver fix` | Error analysis and solutions |
-| `yaver analyze` | Repository analysis |
-| `yaver docker` | Docker command assistance |
-| `yaver status` | System status check |
-
-## Testing
+Or manually create `.env`:
 
 ```bash
-# Run all tests
-python3 test_cli.py
-python3 test_modules.py
+# Ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL_GENERAL=llama3.1:8b
+OLLAMA_MODEL_EMBEDDING=nomic-embed-text
 
-# Using make
-make test-all
+# Qdrant
+QDRANT_URL=http://localhost:6333
+QDRANT_MODE=local
+VECTOR_DB_PROVIDER=qdrant
+
+# Neo4j
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
 ```
 
-**Result**: 20/20 tests passing ✅
-
-## Troubleshooting
-
-### Connection Issues
-
-**Error**: `Connection refused` or LLM not responding
-
-1. Verify Ollama is running: `curl http://localhost:11434/api/tags`
-2. Run setup again: `yaver setup`
-3. Check config file: `cat ~/.yaver/config.json`
-
-### Permission Errors
-
-**Error**: `Permission denied` (Docker operations)
+## 🐳 Docker Services
 
 ```bash
-# Add user to docker group
-sudo usermod -aG docker $USER
-sudo systemctl restart docker
-newgrp docker
+# Start all services
+cd docker
+docker-compose up -d
+
+# Or use Yaver CLI
+yaver docker start
+yaver docker status
+yaver docker logs
 ```
 
-### Import Errors
+## 🤝 Contributing
 
-**Error**: `ImportError: No module named...`
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for:
+- Development setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
 
-1. Reinstall: `pip install -e .`
-2. Use virtual environment
-3. Verify Python 3.10+: `python3 --version`
+## 📄 License
 
-### Configuration Errors
+MIT License - See [LICENSE](LICENSE) for details
 
-1. Run setup: `yaver setup`
-2. Validate JSON: `python3 -m json.tool ~/.yaver/config.json`
-3. Check file permissions
+## 🔗 Links
 
-### System Package Conflicts
-
-**Error**: `externally-managed-environment`
-
-```bash
-# Recommended: Use virtual environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -e .
-
-# Or use pipx
-pipx install -e .
-```
-
-## Architecture
-
-```
-src/
-  cli/           # CLI interface and commands
-  config/        # Configuration management
-  agents/        # AI agent implementations
-  core/          # Core engine
-  memory/        # Memory and context management
-  tools/         # Git and system tools
-  utils/         # Utilities and prompts
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on bug reports, feature requests, and code contributions.
-
-## License
-
-MIT License - See [LICENSE](LICENSE) file for details.
+- **GitHub**: https://github.com/tevfik/yaver
+- **Issues**: https://github.com/tevfik/yaver/issues
+- **Discussions**: https://github.com/tevfik/yaver/discussions
 
 ---
 
-For issues and discussions, please use the [GitHub repository](https://github.com/tevfik/yaver).
+**Version**: 1.2.0 | **Status**: Production Ready ✅

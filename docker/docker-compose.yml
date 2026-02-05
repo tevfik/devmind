@@ -1,5 +1,16 @@
 
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: yaver-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - yaver-network
+
   qdrant:
     image: qdrant/qdrant:latest
     container_name: yaver-qdrant

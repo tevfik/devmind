@@ -1,299 +1,193 @@
-# Yaver - Quick Start Guide
+# Quick Start Guide
 
-## TL;DR - Start in 30 Seconds
+Get Yaver AI running in 5 minutes.
+
+## 1. Install
 
 ```bash
-# 1. Clone
+# Clone repository
 git clone https://github.com/tevfik/yaver.git
 cd yaver
 
-# 2. Install (with all integrations: Qdrant, Neo4j, Ollama, LangChain, etc.)
-bash docs/QUICK_INSTALL.sh
-
-# 3. Use
-yaver chat
-```
-
-Done. Everything works.
-
----
-
-## What Is This?
-
-Yaver is a fully functional AI development assistant:
-- 🤖 LLM integration (Ollama, LangChain)
-- 🧠 Vector database (Qdrant)
-- 📊 Code graph analysis (Neo4j)
-- 🔍 Git analysis
-- 💻 Code quality control
-- 🎨 Beautiful terminal UI
-
-**Single install**: `pip install -e .`
-**Everything included**: Qdrant, Neo4j, Ollama, etc.
-**Run immediately**: `yaver chat`
-
----
-
-## Installation
-
-### Option 1: Automatic Script
-```bash
-bash docs/QUICK_INSTALL.sh
-```
-
-Automatically:
-- Creates virtual environment
-- Installs all dependencies
-- Ready to use
-
-### Option 2: Manual
-```bash
 # Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Install
 pip install -e .
-
-# Run
-yaver chat
 ```
 
----
+## 2. Start Services
 
-## Commands
+Yaver requires Docker services (Qdrant, Neo4j, Ollama):
 
 ```bash
-# Deep Learn Repository (Recommended first step)
-yaver analyze . --type deep --project-id my-project
-
-# Autonomous Agent (Get recommendations)
-yaver agent analyze my-project
-
-# Interactive chat
-yaver chat
-
-# Lite Analysis (Overview)
-yaver analyze .
-
-# Generate commit message
-yaver commit
-
-# Solve task (automatic branch, edit, PR)
-yaver solve "Add authentication"
-
-# Edit file
-yaver edit "Add type hints" --file src/app.py
-
-# Explain shell commands
-yaver explain "grep -r pattern ."
-
-# Suggest shell command
-yaver suggest "Find all python files"
+cd docker
+docker-compose up -d
 ```
 
----
+**Verify services are running:**
+```bash
+yaver docker status
+```
 
-## First Use
+## 3. Configure
 
+Run the interactive setup wizard:
+
+```bash
+yaver setup
+```
+
+This will:
+- Configure Ollama (LLM)
+- Set up Qdrant or ChromaDB (vector database)
+- Configure Neo4j (graph database)
+- Optionally set up Forge integration (Gitea/GitHub)
+
+## 4. First Use
+
+### Interactive Chat
 ```bash
 yaver chat
 ```
 
-After running this command:
-- Repository is automatically analyzed
-- Ask questions
-- AI assists
+Ask questions about your code:
+- "How does authentication work?"
+- "Find all database queries"
+- "What functions call login()?"
 
-Example questions:
-```
-> Analyze src/auth.py
-> What functions call login()?
-> Suggest improvements for error handling
-> Add type hints to this file
-```
-
----
-
-## Optional: Start Services
-
-Yaver works, but for better results:
-
-### 1. Ollama (Local LLM)
-```bash
-# Download and install from https://ollama.ai
-ollama serve
-
-# In another terminal:
-ollama pull llama2
-```
-
-### 2. Qdrant (Vector Search)
-```bash
-docker run -p 6333:6333 qdrant/qdrant
-```
-
-### 3. Neo4j (Code Graph)
-```bash
-docker run \
-  -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/password \
-  neo4j:latest
-```
-
----
-
-## .env File (Optional)
-
-Create `.env` in the project folder:
+### Deep Analysis
+Learn your codebase:
 
 ```bash
-# Ollama settings
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama2
-
-# Qdrant settings
-QDRANT_URL=http://localhost:6333
-QDRANT_API_KEY=your-key
-
-# Neo4j settings
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=password
+yaver code analyze . --type deep
 ```
 
----
+This creates:
+- AST (Abstract Syntax Tree)
+- Code graph in Neo4j
+- Semantic embeddings in Qdrant
+
+### Autonomous Task
+Let Yaver work for you:
+
+```bash
+yaver work "Add type hints to auth module"
+```
+
+The agent will:
+1. Analyze the task
+2. Plan the approach
+3. Execute using tools (read, edit, git)
+4. Report results
+
+## Common Commands
+
+```bash
+# Chat
+yaver chat                          # Interactive chat
+yaver chat --project-id=myapp       # Chat with specific project
+
+# Code Analysis
+yaver code analyze .                # Quick overview
+yaver code analyze . --type deep    # Full analysis (AST + Graph + Embeddings)
+yaver code query "authentication"   # Semantic search
+
+# Autonomous Work
+yaver work "task description"       # Execute task
+
+# System
+yaver system status                 # Check all services
+yaver docker start                  # Start Docker services
+yaver docker logs                   # View service logs
+
+# Utilities
+yaver commit                        # Generate commit message
+yaver explain "git rebase -i HEAD~3"  # Explain command
+```
 
 ## Troubleshooting
 
 ### "yaver: command not found"
 ```bash
-# Is virtual environment active?
-source venv/bin/activate
+# Activate virtual environment
+source .venv/bin/activate
 
-# If not, reinstall:
+# Or reinstall
 pip install -e .
 ```
 
-### "ImportError: No module named 'qdrant_client'"
-Normal. Will be installed later. Yaver continues working.
-
-### "Ollama not found"
+### Services not running
 ```bash
-# Download from https://ollama.ai
-# Or: brew install ollama (Mac)
+# Check Docker
+docker ps
+
+# Start services
+yaver docker start
+
+# Check status
+yaver docker status
+```
+
+### Ollama connection error
+```bash
+# Check Ollama is running
+curl http://localhost:11434
+
+# Or start Ollama container
+docker-compose up -d ollama
 ```
 
 ### Qdrant connection error
 ```bash
-# Is Docker running?
-docker ps | grep qdrant
+# Check Qdrant is running
+curl http://localhost:6333
 
-# If not, start it:
-docker run -p 6333:6333 qdrant/qdrant
+# Or start Qdrant
+docker-compose up -d qdrant
 ```
 
----
-
-## Performance
-
-Typical repository analysis:
-- 1000 files: ~2 seconds
-- Semantic search: ~200ms
-- LLM analysis: 5-30 seconds (depends on model)
-
-Memory usage:
-- Startup: ~150 MB
-- With Qdrant: +100-500 MB
-- With Neo4j: +200-800 MB
-- Fully loaded: 500 MB - 1.5 GB
-
----
-
-## Architecture
-
-```
-Yaver
-├── AI Agent (LangChain)
-│   ├── Query Analyzer
-│   ├── Task Planner
-│   └── Executor
-├── Memory
-│   ├── Vector DB (Qdrant) - Semantic search
-│   ├── Episodic (Chromadb) - History
-│   └── Knowledge (Neo4j) - Code relationships
-├── Tools
-│   ├── Git
-│   ├── Code Analysis
-│   └── Shell
-└── UI
-    ├── Terminal (Rich)
-    └── Web (Gradio)
-```
-
----
-
-## What's Included
-
-All integrations included:
-
-✅ LangChain - Orchestration
-✅ LanGraph - Multi-step flows
-✅ Ollama - Local LLM
-✅ Qdrant - Vector database
-✅ Neo4j - Graph database
-✅ ChromaDB - Memory
-✅ FastAPI - API server
-✅ GitPython - Git operations
-✅ Radon - Code metrics
-✅ Bandit - Security analysis
-✅ Pylint - Code quality
-✅ Rich - Terminal UI
-✅ Gradio - Web UI
-
-Nothing missing.
-
----
-
-## Development
-
-### Run tests
+### Neo4j connection error
 ```bash
-pytest tests/
+# Check Neo4j is running
+docker ps | grep neo4j
+
+# Or start Neo4j
+docker-compose up -d neo4j
+
+# Default credentials:
+# Username: neo4j
+# Password: password
 ```
 
-### Contribute
-```bash
-# Fork
-# Create branch
-# Make changes
-# Write tests
-# Submit PR
-```
+## Next Steps
+
+1. **Read the docs**: [CLI Guide](CLI_GUIDE.md), [Architecture](ARCHITECTURE.md)
+2. **Analyze your code**: `yaver code analyze . --type deep`
+3. **Try autonomous mode**: `yaver work "your task"`
+4. **Explore chat**: `yaver chat` and ask questions
+
+## Performance Tips
+
+- **First analysis is slow** (~2-5 min for medium repos) - embeddings are cached
+- **Incremental analysis** - Only changed files are re-analyzed
+- **Use project IDs** - Group related repos for better context
+- **Docker resources** - Allocate 4GB+ RAM for smooth operation
+
+## Configuration Files
+
+- `~/.yaver/config.json` - Main configuration
+- `.env` - Environment variables (optional)
+- `docker/docker-compose.yml` - Service definitions
+
+## Getting Help
+
+- **Documentation**: See `docs/` folder
+- **Issues**: https://github.com/tevfik/yaver/issues
+- **Status check**: `yaver system status`
+- **Logs**: `~/.yaver/logs/yaver.log`
 
 ---
 
-## License
-
-MIT - Use, modify, share
-
----
-
-## Support
-
-- Issues: GitHub Issues
-- Questions: GitHub Discussions
-- Documentation: README.md and INSTALLATION.md
-
----
-
-## Summary
-
-| Task | Command | Time |
-|------|---------|------|
-| Install | `bash QUICK_INSTALL.sh` | 2-5 minutes |
-| Start | `yaver chat` | 1 second |
-| Analyze | `yaver analyze .` | 2-5 seconds |
-| Use LLM | Start Ollama | 1 minute |
-
-**Yaver: Single install, full power, works immediately.**
+**Ready to go!** Start with `yaver chat` or `yaver code analyze .`
