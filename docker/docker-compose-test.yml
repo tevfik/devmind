@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  gitea:
+    image: gitea/gitea:1.21.4
+    container_name: yaver_test_gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__server__ROOT_URL=http://localhost:3000/
+      - GITEA__database__DB_TYPE=sqlite3
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - ./gitea_data:/data
+    restart: always
+
+# Simplified for testing - minimal dependencies
+  ollama:
+    image: ollama/ollama:latest
+    container_name: yaver_test_ollama
+    ports:
+      - "11435:11434" # Different port to avoid conflict with dev env
+    volumes:
+      - ./ollama_data:/root/.ollama
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: yaver_test_qdrant
+    ports:
+      - "6335:6333"
+      - "6336:6334"
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.15.0
+    container_name: yaver_test_neo4j
+    ports:
+      - "7475:7474" # HTTP
+      - "7688:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/testpassword
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+    volumes:
+      - ./neo4j_data/data:/data
+    restart: unless-stopped

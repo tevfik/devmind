@@ -28,7 +28,9 @@ class ConfigValidator:
         self.validate_paths()
 
         if self.errors:
-            logger.error(f"Configuration validation failed with {len(self.errors)} errors")
+            logger.error(
+                f"Configuration validation failed with {len(self.errors)} errors"
+            )
             for error in self.errors:
                 logger.error(f"  - {error}")
             return False
@@ -86,7 +88,9 @@ class ConfigValidator:
         elif provider == "chroma":
             persist_dir = Path(self.config.vector_db.chroma_persist_dir)
             if not persist_dir.exists():
-                logger.info(f"ChromaDB persist directory will be created: {persist_dir}")
+                logger.info(
+                    f"ChromaDB persist directory will be created: {persist_dir}"
+                )
 
     def validate_neo4j(self):
         """Validate Neo4j configuration"""
@@ -102,7 +106,9 @@ class ConfigValidator:
             driver.close()
             logger.debug("Neo4j connection verified")
         except ImportError:
-            self.warnings.append("neo4j package not installed. Install with: pip install neo4j")
+            self.warnings.append(
+                "neo4j package not installed. Install with: pip install neo4j"
+            )
         except Exception as e:
             self.warnings.append(
                 f"Cannot connect to Neo4j at {self.config.neo4j.uri}: {e}"

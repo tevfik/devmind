@@ -67,30 +67,83 @@ class CodeChunker:
                     chunks.append(method_chunk)
 
         # 3. If no structural chunks found (e.g., non-Python or flat script)
-        # Create a generic file chunk
+        # OR if the file is handled by generic sliding window
+        # Create sliding window chunks
         if not chunks and source_code.strip():
-            # Simple content truncation for now
-            # TODO: Implement sliding window for large files
-            description = f"Content of file {rel_path}"
+            sliding_chunks = self._create_sliding_window_chunks(
+                source_code, rel_path, file_analysis.language
+            )
+            chunks.extend(sliding_chunks)
 
-            # Reduce fallback chunk size to 600 chars to avoid NaN issues with some embedding models
-            # on large blocks of text (especially repetitive ones like config files)
-            safe_content = source_code[:600]
+        return chunks
 
-            chunks.append(
+    def _create_sliding_window_chunks(
+        self, source_code: str, rel_path: str, language: str
+    ) -> List[CodeChunk]:
+        """
+        Splits generic text into overlapping chunks using a sliding window.
+        Approx settings: 2000 chars window (~500 tokens), 400 chars overlap (~100 tokens).
+        """
+        chunks = []
+        window_size = 2000
+        overlap = 400
+
+        # If small file, return single chunk
+        if len(source_code) <= window_size:
+            return [
                 CodeChunk(
                     chunk_id=f"{rel_path}::whole",
-                    text_content=f"File: {rel_path}\nType: File Content\nLanguage: {file_analysis.language}\n\n{safe_content}",
+                    text_content=f"File: {rel_path}\nType: File Content\nLanguage: {language}\n\n{source_code}",
                     metadata={
                         "id": f"{rel_path}::whole",
                         "file_path": rel_path,
                         "type": "file",
                         "name": rel_path.split("/")[-1],
-                        "language": file_analysis.language,
+                        "language": language,
                     },
-                    original_source=source_code[:3000],
+                    original_source=source_code,
+                )
+            ]
+
+        # Sliding Logic
+        start = 0
+        total_len = len(source_code)
+
+        chunk_idx = 1
+        while start < total_len:
+            end = min(start + window_size, total_len)
+
+            # Try to find a newline near the break point to avoid cutting lines in half
+            if end < total_len:
+                # Look for last newline within the last 100 chars of the window
+                last_newline = source_code.rfind("\n", start, end)
+                if last_newline != -1 and last_newline > (end - 100):
+                    end = last_newline + 1  # Include the newline
+
+            chunk_text = source_code[start:end]
+
+            chunk_id = f"{rel_path}::part{chunk_idx}"
+            chunks.append(
+                CodeChunk(
+                    chunk_id=chunk_id,
+                    text_content=f"File: {rel_path} (Part {chunk_idx})\nType: File Segment\nLanguage: {language}\n\n{chunk_text}",
+                    metadata={
+                        "id": chunk_id,
+                        "file_path": rel_path,
+                        "type": "file_segment",
+                        "part": chunk_idx,
+                        "name": rel_path.split("/")[-1],
+                        "language": language,
+                    },
+                    original_source=chunk_text,
                 )
             )
+
+            if end >= total_len:
+                break
+
+            start += window_size - overlap
+            chunk_idx += 1
 
         return chunks
 

@@ -3,96 +3,48 @@ Yaver Agent Commands
 Manage autonomous agents and their learning.
 """
 import typer
-from ..ui import console, print_title, print_success, print_error, create_table
+from pathlib import Path
+from ..ui import (
+    console,
+    print_title,
+    print_success,
+    print_error,
+    print_warning,
+    create_table,
+    print_section_header,
+)
+from config.config import get_config
 
 app = typer.Typer(help="Manage autonomous agent learning")
 
 
 @app.command()
-def status(
-    project_id: str = typer.Argument(..., help="Project ID to check agent status for")
-):
-    """Show agent learning state."""
-    print_title(f"Agent Status: {project_id}")
-    # Placeholder for agent status implementation
-    # In a real implementation, this would query the agent's memory/state
-    console.print("[dim]Checking agent state...[/dim]")
-    print_success("Agent is active and learning.")
-
-
-@app.command()
-def history(
-    project_id: str = typer.Argument(..., help="Project ID"),
-    limit: int = typer.Option(10, "--limit", "-l", help="Number of items to show"),
-):
-    """Show agent decision history."""
-    print_title(f"Agent History: {project_id}")
-
-    table = create_table(["Time", "Action", "Result"], "Recent Decisions")
-    # Mock data
-    table.add_row("10:00", "Analyze File", "Success")
-    table.add_row("10:05", "Refactor Code", "Completed")
-    console.print(table)
-
-
-@app.command()
-def teach(
-    project_id: str = typer.Argument(..., help="Project ID"),
-    rec_id: str = typer.Argument(..., help="Recommendation ID"),
-    status: str = typer.Option(..., "--status", "-s", help="approve, reject, ignore"),
-    note: str = typer.Option(None, "--note", "-n", help="Optional feedback note"),
-):
-    """Provide feedback to the agent."""
-    print_title("Agent Feedback")
-    console.print(f"Project: {project_id}")
-    console.print(f"Rec ID: {rec_id}")
-    console.print(f"Status: {status}")
-    if note:
-        console.print(f"Note: {note}")
-
-    print_success("Feedback recorded!")
-
-
-@app.command()
 def work(
-    task: str = typer.Argument(..., help="Task description for the agent"),
-    project_id: str = typer.Option(
-        None, "--project-id", "-p", help="Project ID context"
-    ),
-    path: str = typer.Option(".", "--path", help="Path to repository"),
+    request: str = typer.Argument(..., help="Task description for the agent"),
+    path: str = typer.Option(".", "--path", "-p", help="Repository path"),
+    iterations: int = typer.Option(None, "--iterations", "-i", help="Max iterations"),
 ):
-    """
-    Start an autonomous agent to work on a task.
-
-    The agent will:
-    1. Analyze the codebase (if needed)
-    2. Decompose the task into subtasks
-    3. Execute tasks iteratively (edits, git operations)
-    """
-    from pathlib import Path
+    """Execute a task autonomously."""
     from tools.code_analyzer.analyzer import CodeAnalyzer
-    from agents.agent_task_manager import task_manager_node, run_iteration_cycle
-    from agents.agent_base import YaverState, TaskStatus, ConfigWrapper
+    from agents.agent_base import YaverState, ConfigWrapper
+    from agents.task_manager.manager import task_manager_node, run_iteration_cycle
 
-    print_title("Autonomous Agent Worker")
-    console.print(f"[bold]Task:[/bold] {task}")
+    print_section_header("Autonomous Agent Worker", "🤖")
+    console.print(f"\n[bold]Task:[/bold] {request}")
 
     repo_path = Path(path).resolve()
-    if not repo_path.exists():
-        print_error(f"Repository path not found: {repo_path}")
-        raise typer.Exit(1)
-
-    # Initialize Context
     console.print(f"[dim]Initializing context from {repo_path}...[/dim]")
 
-    # 1. Analyze Repo (Quick) to get stats
-    analyzer = CodeAnalyzer(project_id or "cli_worker", repo_path)
-    # Wrap in ConfigWrapper to allow attribute access (e.g. .total_files)
-    repo_info = ConfigWrapper(analyzer.analyze_structure())
+    # 1. Analyze Repo
+    analyzer = CodeAnalyzer(session_id="cli_work", repo_path=repo_path)
+    repo_info_dict = analyzer.analyze_structure()
+    # Wrap in ConfigWrapper for attribute access
+    repo_info = ConfigWrapper(repo_info_dict)
 
-    # 2. Initialize State
+    # 2. Init State
     state = YaverState(
-        user_request=task,
+        user_request=request,
+        repo_path=str(repo_path),
         repo_info=repo_info,
         iteration_count=0,
         tasks=[],
@@ -100,37 +52,42 @@ def work(
         errors=[],
     )
 
-    # 3. Planning Phase
-    console.print("\n[bold cyan]🤔 Planning...[/bold cyan]")
+    # 3. Initial Planning (Decomposition)
+    console.print("\n[bold]🤔 Planning...[/bold]")
     state = task_manager_node(state)
 
-    if not state.get("tasks"):
-        print_error("Failed to generate plan.")
-        raise typer.Exit(1)
+    if state.get("errors"):
+        for err in state["errors"]:
+            print_error(err)
+        return
+
+    tasks = state.get("tasks", [])
+    console.print(f"[green]✅ {len(tasks)} tasks created[/green]")
 
     # 4. Execution Loop
-    console.print("\n[bold cyan]⚙️  Executing...[/bold cyan]")
+    console.print("\n[bold]⚙️  Executing...[/bold]")
+    config = get_config()
+    max_iters = iterations or config.task.max_iterations
 
-    while True:
-        result = run_iteration_cycle(state)
-        state.update(result)
+    should_continue = True
+    while should_continue and state.get("iteration_count", 0) < max_iters:
+        state = run_iteration_cycle(state)
+        should_continue = state.get("should_continue", False)
 
-        # Check termination
-        if not result.get("should_continue", False):
-            break
+        # Check for immediate errors in state update
+        if not should_continue and not any(
+            t.status == "completed" for t in state.get("tasks", [])
+        ):
+            if state.get("errors"):
+                for err in state["errors"]:
+                    print_error(err)
+                break
 
-        current_task = result.get("current_task")
-        if current_task and current_task.status == TaskStatus.FAILED:
-            # Stop mainly on failure for now to avoid cascading breaks in CLI mode
-            # In full agent mode, it might try to self-correct
-            print_error(f"Task failed: {current_task.error}")
-            break
+    # 5. Summary
+    completed = [t for t in state.get("tasks", []) if t.status.value == "completed"]
+    total = len(state.get("tasks", []))
 
-    # Summary
-    completed = len([t for t in state["tasks"] if t.status == TaskStatus.COMPLETED])
-    total = len(state["tasks"])
-
-    if completed == total:
-        print_success(f"All {total} tasks completed successfully!")
+    if completed:
+        print_success(f"\n✅ Completed {len(completed)}/{total} tasks.")
     else:
-        console.print(f"\n[yellow]⚠️  Completed {completed}/{total} tasks.[/yellow]")
+        print_warning(f"\n⚠️  Completed {len(completed)}/{total} tasks.")
