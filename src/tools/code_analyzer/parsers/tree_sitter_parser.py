@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 import tree_sitter
 from tree_sitter import Language, Parser
-import tree_sitter_languages
+
+try:
+    import tree_sitter_languages
+except ImportError:
+    tree_sitter_languages = None
 
 from ..models import FileAnalysis, ClassInfo, FunctionInfo
 from .base import BaseParser
@@ -49,34 +53,23 @@ class TreeSitterParser(BaseParser):
         # C++ / C Queries
         if self.language_name in ["cpp", "c"]:
             # More robust function definition query for C/C++
-            # Handles:
-            # 1. int foo()
-            # 2. int *foo()
-            # 3. static int foo()
-            # 4. struct A foo()
             self.queries[
                 "functions"
             ] = """
             (function_definition
               declarator: (function_declarator
-                declarator: (identifier) @func.name)
+                declarator: [(identifier) (field_identifier)] @func.name
+                parameters: (parameter_list) @func.args)
             ) @func.def
 
             (function_definition
               declarator: (pointer_declarator
                 declarator: (function_declarator
-                  declarator: (identifier) @func.name))
-            ) @func.def
-
-            (function_definition
-               declarator: (pointer_declarator
-                  declarator: (pointer_declarator
-                     declarator: (function_declarator
-                        declarator: (identifier) @func.name)))
+                  declarator: [(identifier) (field_identifier)] @func.name
+                  parameters: (parameter_list) @func.args))
             ) @func.def
             """
 
-            # Struct/Class Queries
             self.queries[
                 "classes"
             ] = """
@@ -117,6 +110,7 @@ class TreeSitterParser(BaseParser):
             ] = """
             (function_definition
               name: (identifier) @func.name
+              parameters: (parameters) @func.args
             ) @func.def
             """
             self.queries[
@@ -303,6 +297,26 @@ class TreeSitterParser(BaseParser):
                 if call["caller"] == "unknown":
                     call["caller"] = "<global>"
 
+            # Post-process: Move methods into classes
+            # We iterate backwards to allow safe removal or use a new list
+            top_level_functions = []
+
+            for func in analysis.functions:
+                assigned_to_class = False
+                for cls in analysis.classes:
+                    if (
+                        cls.start_line <= func.start_line
+                        and func.end_line <= cls.end_line
+                    ):
+                        cls.methods.append(func)
+                        assigned_to_class = True
+                        break
+
+                if not assigned_to_class:
+                    top_level_functions.append(func)
+
+            analysis.functions = top_level_functions
+
             return analysis
 
         except Exception as e:
@@ -354,7 +368,7 @@ class TreeSitterParser(BaseParser):
                     "end_line": node.end_point[0] + 1,
                 }
 
-        # Second pass: Associate names with definitions
+        # Second pass: Associate names and args with definitions
         for node, name in captures:
             if name == "func.name":
                 # Traverse up to find the parent function definition
@@ -366,12 +380,27 @@ class TreeSitterParser(BaseParser):
                         ].decode("utf8")
                         break
                     parent = parent.parent
+            elif name == "func.args":
+                # Traverse up to find the parent function definition
+                parent = node
+                while parent:
+                    if parent.id in functions_map:
+                        args_text = source_bytes[
+                            node.start_byte : node.end_byte
+                        ].decode("utf8")
+                        # Basic cleanup: remove parens and split
+                        args_clean = args_text.strip("()").split(",")
+                        functions_map[parent.id]["args"] = [
+                            a.strip() for a in args_clean if a.strip()
+                        ]
+                        break
+                    parent = parent.parent
 
         for info in functions_map.values():
             analysis.functions.append(
                 FunctionInfo(
                     name=info["name"],
-                    args=[],  # TODO: Extract args
+                    args=info.get("args", []),
                     returns=None,
                     docstring=None,
                     start_line=info["start_line"],
@@ -408,7 +437,6 @@ class TreeSitterParser(BaseParser):
                     parent = parent.parent
 
         for info in classes_map.values():
-            # TODO: Extract methods inside class
             analysis.classes.append(
                 ClassInfo(
                     name=info["name"],

@@ -68,7 +68,9 @@ class MetricsCollector:
 
     def get_all_stats(self) -> Dict[str, Dict[str, float]]:
         """Get all metric statistics"""
-        return {name: self.get_stats(name) for name in self.metrics if self.get_stats(name)}
+        return {
+            name: self.get_stats(name) for name in self.metrics if self.get_stats(name)
+        }
 
     def reset(self):
         """Reset all metrics"""

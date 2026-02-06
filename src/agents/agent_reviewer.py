@@ -70,12 +70,55 @@ class ReviewerAgent:
     ) -> str:
         """Internal method for standard single-pass review."""
         context = ""
+
+        # 0. Run Scanners (Complexity, etc.)
+        from tools.code_analyzer.scanners import ComplexityScanner
+
+        scanner_msgs = []
+        try:
+            # Complexity Scanner (Polyglot)
+            comp_scanner = ComplexityScanner()
+            # Determine path for extension checking
+            f_path_str = file_path if file_path else "unknown.py"
+
+            supported_complexity_exts = [
+                ".py",
+                ".cpp",
+                ".cc",
+                ".cxx",
+                ".h",
+                ".hpp",
+                ".c",
+                ".java",
+                ".js",
+                ".go",
+            ]
+            if any(f_path_str.endswith(ext) for ext in supported_complexity_exts):
+                c_res = comp_scanner.scan(
+                    code, file_path
+                )  # file_path might be None, handled by scanner
+                for r in c_res:
+                    scanner_msgs.append(f"⚠️ {r.message}")
+        except Exception as e:
+            self.logger.warning(f"Scanner failed in single file review: {e}")
+
+        if scanner_msgs:
+            self.logger.debug(
+                f"Injecting {len(scanner_msgs)} scanner findings into context."
+            )
+            context += (
+                "\n\n### Automated Analysis Findings:\n"
+                + "\n".join(scanner_msgs)
+                + "\n"
+            )
+
         if file_path:
             try:
-                context = retrieve_relevant_context(
+                retrieved = retrieve_relevant_context(
                     f"File: {file_path}\nCode: {code[:500]}"
                 )
-                self.logger.info(f"Retrieved {len(context)} chars of context.")
+                context += f"\n\n### Structural Context:\n{retrieved}"
+                self.logger.info(f"Retrieved {len(retrieved)} chars of context.")
             except Exception as e:
                 self.logger.warning(f"Failed to retrieve context: {e}")
 
@@ -118,12 +161,42 @@ class ReviewerAgent:
             f"**Analyzed Files**: `{len(files_data)} modified files`\n\n"
         )
 
+        # Test Coverage Heuristic
+        src_files = [
+            f for f in files_data.keys() if f.startswith("src/") and f.endswith(".py")
+        ]
+        test_files = [
+            f for f in files_data.keys() if f.startswith("tests/") or "test" in f
+        ]
+
+        if src_files and not test_files:
+            consolidated_report += "⚠️ **Risk Warning**: Source code modified but no tests found in this PR.\n\n"
+        elif src_files:
+            # Check 1:1 mapping heuristic (loose)
+            untested = []
+            for src in src_files:
+                base = src.split("/")[-1].replace(".py", "")
+                if not any(base in t for t in test_files):
+                    untested.append(src)
+            if untested:
+                consolidated_report += f"ℹ️ **Test Coverage Note**: Verification missing for: `{'`, `'.join(untested)}`\n\n"
+
         scratchpad = []
         has_critical_issues = False
 
         print_info(f"Start iterative review for {len(files_data)} files...")
 
         # 2. Iterate and Review
+        from tools.code_analyzer.scanners import (
+            ComplexityScanner,
+            SecurityScanner,
+            LinterScanner,
+        )
+
+        comp_scanner = ComplexityScanner()
+        sec_scanner = SecurityScanner()
+        lint_scanner = LinterScanner()
+
         for fname, fcontent in files_data.items():
             self.logger.info(f"Reviewing specific file: {fname}")
 
@@ -134,14 +207,55 @@ class ReviewerAgent:
 
             checker = SyntaxChecker()
             full_path = self.repo_path / fname
+
+            # Check file existence before running tools that read from disk
             if full_path.exists():
+                # 1. Syntax
                 res = checker.check(str(full_path))
                 if not res.valid:
                     syntax_clean = False
                     has_critical_issues = True
                     syntax_msg = f"❌ **Syntax Error**: {res.error_message}"
 
-            # B. Graph Impact
+                # 2. Advanced Scanners
+                scanner_msgs = []
+
+                # Complexity Scanner (Polyglot)
+                # Supports Python, C++, Java, JS, Go
+                supported_complexity_exts = [
+                    ".py",
+                    ".cpp",
+                    ".cc",
+                    ".cxx",
+                    ".h",
+                    ".hpp",
+                    ".c",
+                    ".java",
+                    ".js",
+                    ".go",
+                ]
+                if any(fname.endswith(ext) for ext in supported_complexity_exts):
+                    try:
+                        c_res = comp_scanner.scan(fcontent, str(full_path))
+                        for r in c_res:
+                            scanner_msgs.append(f"⚠️ {r.message}")
+                    except Exception as e:
+                        self.logger.warning(f"Complexity scan failed for {fname}: {e}")
+
+                # Python specific scanners
+                if fname.endswith(".py"):
+                    # Security & Lint (Pass path)
+                    s_res = sec_scanner.scan(str(full_path))
+                    for r in s_res:
+                        scanner_msgs.append(f"🔒 {r.message}")
+
+                    l_res = lint_scanner.scan(str(full_path))
+                    for r in l_res:
+                        scanner_msgs.append(f"🧹 {r.message}")
+
+                    # Future: Add C/C++ scanners here (cppcheck, clang-tidy)
+
+                # B. Graph Impact
             impact_msg = ""
             try:
                 impact_ctx = retrieve_relevant_context(

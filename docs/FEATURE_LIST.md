@@ -24,7 +24,9 @@ Yaver AI is an autonomous, polyglot software development assistant that integrat
 
 ## 🛠️ Deep Code Analysis
 *   **Language Agnostic Parsing**: Uses **Tree-sitter** for robust parsing of C, C++, Python, Go, JS/TS, and more.
-*   **Static Analysis Integration**: Built-in support for tools like `Radon` (complexity), `Bandit` (security), and `Lizard` (metrics).
+*   **Static Analysis Integration**:
+    *   **Python**: Built-in support for AST Complexity, `Bandit` (security), and `Flake8` (linting).
+    *   **Polyglot Syntax**: Hard verification via `gcc`, `clang`, `go build`, `node -c`.
 *   **Dependency Mapping**: Automatically extracts and indexes import chains and function calls to build a project map.
 
 ## 🔌 Interactions & Integrations

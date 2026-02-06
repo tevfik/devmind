@@ -9,12 +9,16 @@ import logging
 
 from .models import FileAnalysis, ClassInfo, FunctionInfo, ImportInfo
 from .parsers.base import BaseParser
+from .call_graph import CallGraphBuilder
 
 logger = logging.getLogger(__name__)
 
 
 class ASTParser(BaseParser):
     """Parses Python code to extract structural information"""
+
+    def __init__(self):
+        self.call_graph_builder = CallGraphBuilder()
 
     def parse(
         self, source_code: str, file_path: Path, repo_root: Path
@@ -38,6 +42,9 @@ class ASTParser(BaseParser):
             analysis.classes = visitor.classes
             analysis.functions = visitor.functions
             analysis.imports = visitor.imports
+
+            # Extract Calls
+            analysis.calls = self.call_graph_builder.build(tree)
 
             return analysis
 

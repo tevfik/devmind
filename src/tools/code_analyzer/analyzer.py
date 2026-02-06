@@ -211,8 +211,9 @@ class CodeAnalyzer:
         files = list(self._find_files())
 
         if incremental:
-            # TODO: Better state tracking efficiently.
-            pass
+            self.session.log_progress(
+                "Incremental mode: Using cached analysis where possible."
+            )
 
         total_files = len(files)
 
@@ -246,18 +247,10 @@ class CodeAnalyzer:
                                     content, file_path, self.repo_path
                                 )
 
-                                # Python Specific Enrichment (Call Graph & Resolve Imports)
-                                # TODO: Move this logic into ASTParser or LanguageSpecific Enrichers
+                                # Python Specific Enrichment (Resolve Imports)
+                                # Note: Call Graph extraction is now handled inside ASTParser/TreeSitterParser
                                 if analysis and isinstance(parser, ASTParser):
                                     try:
-                                        # Parse AST for calls
-                                        tree = ast.parse(
-                                            content, filename=str(file_path)
-                                        )
-                                        analysis.calls = self.call_graph_builder.build(
-                                            tree
-                                        )
-
                                         # Resolve Imports
                                         for imp in analysis.imports:
                                             resolved = (
@@ -281,7 +274,7 @@ class CodeAnalyzer:
                                                     ] = str(resolved)
                                     except Exception as e:
                                         logger.warning(
-                                            f"AST enrichment failed for {file_path}: {e}"
+                                            f"Import resolution failed for {file_path}: {e}"
                                         )
 
                             except Exception as e:

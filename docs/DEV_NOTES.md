@@ -24,13 +24,10 @@ Yaver is evolving from a simple Python coding assistant into a **Polyglot Autono
         - [x] `SyntaxChecker` module with Tool -> LLM fallback.
         - [x] **Output Feedback Loop**: Integrated into `AgentTaskManager`. If `SyntaxChecker` fails, it triggers `CoderAgent.fix_code()` automatically.
         - [x] **Verify Tests**: Created `tests/integration/test_parser_real.py` and `tests/integration/test_syntax_real.py`.
-
-## 🟡 Phase 2: Enhanced Context & Reasoning (Current)
-*Target: "Think before you code."*
-
-### Architecture Upgrade
-- [x] **Build System Awareness**:
-    - Created `BuildAnalyzer` to parse Makefile/Go/CMake.
+- [x] **Deep Review Tier (Python)**:
+    - [x] Implemented `scanners.py` using AST/Bandit/Flake8.
+    - [x] Integrated into `ReviewerAgent`.
+    - [ ] **TODO**: Port Complexity/Security scanners to C++ (cppcheck/lizard) and Go.
     - Integrated into `agent_task_manager.py` prompt.
     - **Implementation**: Updated `tools/memory_ops.py` to ingest build targets using `BuildAnalyzer`.
 - [x] **Logic & Reasoning Integration**:
