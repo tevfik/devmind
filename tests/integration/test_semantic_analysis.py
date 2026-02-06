@@ -57,6 +57,8 @@ def test_semantic_analysis_flow(
     mock_embedder.embed_code_batch.side_effect = fake_embed
 
     analyzer = CodeAnalyzer("test_semantic_session", repo_path)
+    # Ensure memory type is Qdrant for this test
+    analyzer.memory_config.memory_type = "qdrant"
 
     # Execute with usage_semantic=True
     analyzer.analyze_repository(use_semantic=True)

@@ -26,8 +26,14 @@ def global_func():
 
         # Verify functions
         func_names = [f.name for f in analysis.functions]
-        # order is not guaranteed by captures? usually document order.
-        assert "my_method" in func_names
+        # Top-level global_func should be here
+        assert "global_func" in func_names
+
+        # Method should be in class
+        assert len(analysis.classes) == 1
+        cls = analysis.classes[0]
+        method_names = [m.name for m in cls.methods]
+        assert "my_method" in method_names
         assert "global_func" in func_names
 
         # Check specific details for global_func

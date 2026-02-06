@@ -22,12 +22,14 @@ public class MyJavaClass {
         assert len(analysis.classes) == 1
         assert analysis.classes[0].name == "MyJavaClass"
 
-        # Verify Methods (including constructor)
-        func_names = [f.name for f in analysis.functions]
+        # Verify Methods (including constructor) usually attached to class
+        cls = analysis.classes[0]
+        method_names = [m.name for m in cls.methods]
+
         # Note: TreeSitter might capture constructor as generic usage depending on grammar,
         # but my query explicitely looks for constructor_declaration
-        assert "myMethod" in func_names
-        assert "MyJavaClass" in func_names  # Constructor
+        assert "myMethod" in method_names
+        assert "MyJavaClass" in method_names  # Constructor
 
         # Verify call
         calls = [c["callee"] for c in analysis.calls]
@@ -53,7 +55,11 @@ function globalFunc() {}
         # Verify Functions
         func_names = [f.name for f in analysis.functions]
         assert "globalFunc" in func_names
-        assert "myMethod" in func_names
+
+        # Verify Methods in Class
+        cls = analysis.classes[0]
+        method_names = [m.name for m in cls.methods]
+        assert "myMethod" in method_names
 
         # Verify Calls
         calls = [c["callee"] for c in analysis.calls]
