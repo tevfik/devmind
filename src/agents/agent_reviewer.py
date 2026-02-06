@@ -25,6 +25,10 @@ from tools.code_analyzer.analyzer import CodeAnalyzer
 import re
 import os
 
+from agents.reviewer_components.scanner_integrator import ScannerIntegrator
+from agents.reviewer_components.report_generator import ReportGenerator
+from agents.reviewer_components.context_builder import ContextBuilder
+
 logger = logging.getLogger("agents")
 
 
@@ -46,6 +50,11 @@ class ReviewerAgent:
         self.logger = logger
         self.config = get_config()
         self.repo_path = Path(repo_path)
+
+        # Components
+        self.scanner = ScannerIntegrator()
+        self.reporter = ReportGenerator()
+        self.context_builder = ContextBuilder()
 
     def review_code(self, code: str, requirements: str, file_path: str = None) -> str:
         """
@@ -69,58 +78,14 @@ class ReviewerAgent:
         self, code: str, requirements: str, file_path: str = None
     ) -> str:
         """Internal method for standard single-pass review."""
-        context = ""
 
-        # 0. Run Scanners (Complexity, etc.)
-        from tools.code_analyzer.scanners import ComplexityScanner
-
+        # 1. Run Scanners via Component
         scanner_msgs = []
-        try:
-            # Complexity Scanner (Polyglot)
-            comp_scanner = ComplexityScanner()
-            # Determine path for extension checking
-            f_path_str = file_path if file_path else "unknown.py"
-
-            supported_complexity_exts = [
-                ".py",
-                ".cpp",
-                ".cc",
-                ".cxx",
-                ".h",
-                ".hpp",
-                ".c",
-                ".java",
-                ".js",
-                ".go",
-            ]
-            if any(f_path_str.endswith(ext) for ext in supported_complexity_exts):
-                c_res = comp_scanner.scan(
-                    code, file_path
-                )  # file_path might be None, handled by scanner
-                for r in c_res:
-                    scanner_msgs.append(f"⚠️ {r.message}")
-        except Exception as e:
-            self.logger.warning(f"Scanner failed in single file review: {e}")
-
-        if scanner_msgs:
-            self.logger.debug(
-                f"Injecting {len(scanner_msgs)} scanner findings into context."
-            )
-            context += (
-                "\n\n### Automated Analysis Findings:\n"
-                + "\n".join(scanner_msgs)
-                + "\n"
-            )
-
         if file_path:
-            try:
-                retrieved = retrieve_relevant_context(
-                    f"File: {file_path}\nCode: {code[:500]}"
-                )
-                context += f"\n\n### Structural Context:\n{retrieved}"
-                self.logger.info(f"Retrieved {len(retrieved)} chars of context.")
-            except Exception as e:
-                self.logger.warning(f"Failed to retrieve context: {e}")
+            scanner_msgs = self.scanner.run_scanners(Path(file_path), code)
+
+        # 2. Build Context via Component
+        context = self.context_builder.build_context(file_path, code, scanner_msgs)
 
         prompt = ChatPromptTemplate.from_messages(
             [("system", REVIEWER_SYSTEM_PROMPT), ("user", REVIEWER_USER_TEMPLATE)]
@@ -187,159 +152,45 @@ class ReviewerAgent:
         print_info(f"Start iterative review for {len(files_data)} files...")
 
         # 2. Iterate and Review
-        from tools.code_analyzer.scanners import (
-            ComplexityScanner,
-            SecurityScanner,
-            LinterScanner,
-        )
-
-        comp_scanner = ComplexityScanner()
-        sec_scanner = SecurityScanner()
-        lint_scanner = LinterScanner()
-
         for fname, fcontent in files_data.items():
             self.logger.info(f"Reviewing specific file: {fname}")
-
-            # A. Syntax Check
-            syntax_clean = True
-            syntax_msg = ""
-            from tools.analysis.syntax import SyntaxChecker
-
-            checker = SyntaxChecker()
             full_path = self.repo_path / fname
 
-            # Check file existence before running tools that read from disk
+            # A. Syntax Check via Component
+            syntax_res = self.scanner.check_syntax(full_path)
+            if not syntax_res["valid"]:
+                has_critical_issues = True
+
+            # B. Scanners via Component
+            scanner_msgs = []
             if full_path.exists():
-                # 1. Syntax
-                res = checker.check(str(full_path))
-                if not res.valid:
-                    syntax_clean = False
-                    has_critical_issues = True
-                    syntax_msg = f"❌ **Syntax Error**: {res.error_message}"
+                scanner_msgs = self.scanner.run_scanners(full_path, fcontent)
 
-                # 2. Advanced Scanners
-                scanner_msgs = []
+            # C. Graph Impact via Component
+            impact_msg = self.context_builder.get_impact_analysis(fname)
 
-                # Complexity Scanner (Polyglot)
-                # Supports Python, C++, Java, JS, Go
-                supported_complexity_exts = [
-                    ".py",
-                    ".cpp",
-                    ".cc",
-                    ".cxx",
-                    ".h",
-                    ".hpp",
-                    ".c",
-                    ".java",
-                    ".js",
-                    ".go",
-                ]
-                if any(fname.endswith(ext) for ext in supported_complexity_exts):
-                    try:
-                        c_res = comp_scanner.scan(fcontent, str(full_path))
-                        for r in c_res:
-                            scanner_msgs.append(f"⚠️ {r.message}")
-                    except Exception as e:
-                        self.logger.warning(f"Complexity scan failed for {fname}: {e}")
-
-                # Python specific scanners
-                if fname.endswith(".py"):
-                    # Security & Lint (Pass path)
-                    s_res = sec_scanner.scan(str(full_path))
-                    for r in s_res:
-                        scanner_msgs.append(f"🔒 {r.message}")
-
-                    l_res = lint_scanner.scan(str(full_path))
-                    for r in l_res:
-                        scanner_msgs.append(f"🧹 {r.message}")
-
-                    # Future: Add C/C++ scanners here (cppcheck, clang-tidy)
-
-                # B. Graph Impact
-            impact_msg = ""
-            try:
-                impact_ctx = retrieve_relevant_context(
-                    f"What depends on {fname}?", limit=2
+            # D. LLM Review
+            file_reqs = f"{requirements}\nFocus ONLY on the changes in {fname}."
+            if not syntax_res["valid"]:
+                file_reqs += (
+                    f"\nCRITICAL: There are syntax errors: {syntax_res['error']}"
                 )
-                if "Structural Context" in impact_ctx:
-                    lines = [l for l in impact_ctx.split("\n") if "->" in l]
-                    if lines:
-                        impact_msg = "Possible Ripple Effects:\n" + "\n".join(
-                            [f"> {l}" for l in lines[:3]]
-                        )
-            except:
-                pass
 
-            # C. LLM Review of this specific file change
-            file_reqs = f"{requirements}\nFocus ONLY on the changes in {fname}. Ignote context outside this file."
-            if not syntax_clean:
-                file_reqs += f"\nCRITICAL: There are syntax errors: {syntax_msg}"
-
-            # We pass the diff content for this file + context
             llm_review = self._review_single_file_or_snippet(fcontent, file_reqs, fname)
 
-            # Extract formatted findings (naive extraction of list items or headers)
-            # Or just append the whole thing if it's short.
-            # Let's clean it up a bit using a quick summary prompt or just append.
-
-            scratchpad.append(
-                {
-                    "file": fname,
-                    "syntax": syntax_msg,
-                    "impact": impact_msg,
-                    "review": llm_review,
-                }
+            # E. Format File Section via Reporter
+            file_report = self.reporter.format_file_review(
+                fname,
+                syntax_res["valid"],
+                f"❌ **Syntax Error**: {syntax_res['error']}"
+                if not syntax_res["valid"]
+                else "",
+                scanner_msgs,
+                impact_msg,
+                llm_review,
             )
 
-        # 3. Consolidate Output
-        for item in scratchpad:
-            fname = item["file"]
-            review_text = item["review"]
-
-            # If review says "Approved" or "No issues", simplify output
-            is_clean = "APPROVED" in review_text or "No issues found" in review_text
-
-            if is_clean and not item["syntax"]:
-                consolidated_report += (
-                    f  ### ✅ {fname}\n*No significant issues found.*\n\n"
-                )
-            else:
-                consolidated_report += f"### ⚠️ {fname}\n"
-                if item["syntax"]:
-                    consolidated_report += f"{item['syntax']}\n\n"
-                if item["impact"]:
-                    consolidated_report += f"{item['impact']}\n\n"
-
-                # Filter out the standard JSON header if present in sub-review
-                clean_review = review_text.replace("```json", "").replace("```", "")
-                # Try to parse JSON to get just issues list if possible, otherwise dump text
-                import json
-
-                try:
-                    data = json.loads(clean_review)
-                    if "issues" in data and data["issues"]:
-                        for issue in data["issues"]:
-                            consolidated_report += f"- {issue}\n"
-                    if "suggestions" in data and data["suggestions"]:
-                        consolidated_report += "\n**Suggestions**:\n"
-                        for sug in data["suggestions"]:
-                            consolidated_report += f"- {sug}\n"
-                except:
-                    # Fallback text
-                    consolidated_report += (
-                        f"\n{review_text[:1000]}\n"  # Truncate if too long
-                    )
-
-                consolidated_report += "\n---\n"
-
-        # 4. Final Verdict
-        if has_critical_issues:
-            consolidated_report += (
-                "\n# 🛑 FAILS\n**Reason**: Critical syntax errors detected."
-            )
-        else:
-            # We can run a final summary LLM pass here if needed for DORA stats.
-            pass
+            consolidated_report += file_report
 
         return consolidated_report
 

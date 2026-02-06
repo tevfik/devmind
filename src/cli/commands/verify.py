@@ -24,7 +24,8 @@ def verify_social_live(
     2. Creates a test issue (optional).
     3. Triggers the social developer agent loop.
     """
-    from agents.agent_task_manager import social_developer_node, YaverState
+    from agents.task_manager.manager import social_developer_node
+    from agents.agent_base import YaverState
 
     console.print(f"[bold blue]🔬 Starting Social Developer Verification...[/bold blue]")
 
@@ -100,7 +101,8 @@ def verify_social_clean(
     """
     import shutil
     import git
-    from agents.agent_task_manager import social_developer_node, YaverState
+    from agents.task_manager.manager import social_developer_node
+    from agents.agent_base import YaverState
 
     console.print(f"[bold blue]🧹 Setting up sandbox at {sandbox_dir}...[/bold blue]")
     if os.path.exists(sandbox_dir):

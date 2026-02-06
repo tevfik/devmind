@@ -27,7 +27,7 @@ def work(
     """Execute a task autonomously."""
     from tools.code_analyzer.analyzer import CodeAnalyzer
     from agents.agent_base import YaverState, ConfigWrapper
-    from agents.agent_task_manager import task_manager_node, run_iteration_cycle
+    from agents.task_manager.manager import task_manager_node, run_iteration_cycle
 
     print_section_header("Autonomous Agent Worker", "🤖")
     console.print(f"\n[bold]Task:[/bold] {request}")

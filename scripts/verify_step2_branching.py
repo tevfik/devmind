@@ -12,7 +12,7 @@ from typing import Dict, Any
 # Ensure src is in path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
-from agents.agent_task_manager import social_developer_node
+from agents.task_manager import social_developer_node
 from tools.forge.tool import ForgeTool
 
 # Credentials (Yaver)

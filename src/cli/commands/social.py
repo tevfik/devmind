@@ -33,7 +33,7 @@ def run(
     ),
 ):
     """Run the social developer agent to monitor and handle issues/PRs."""
-    from agents.agent_task_manager import social_developer_node
+    from agents.task_manager.manager import social_developer_node
     from agents.agent_base import YaverState
     import time
     import os

@@ -22,7 +22,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
 from config.config import get_config
 from tools.forge.tool import ForgeTool
-from agents.agent_task_manager import social_developer_node, YaverState
+from agents.task_manager import social_developer_node
+from agents.agent_base import YaverState
 
 # Credentials provided by user
 YAVER_USER = "yaver"

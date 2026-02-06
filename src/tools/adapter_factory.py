@@ -173,6 +173,21 @@ def get_graph_adapter(config: YaverConfig) -> Union[NetworkXAdapter, any]:
                         else "No structural context found."
                     )
 
+                def find_nodes_by_name(self, name: str):
+                    query = """
+                    MATCH (n)
+                    WHERE n.name = $name OR n.path = $name OR n.path ENDS WITH $name
+                    RETURN labels(n) as labels, properties(n) as props
+                    """
+                    nodes = []
+                    with self.driver.session() as session:
+                        results = session.run(query, name=name)
+                        for record in results:
+                            props = record["props"]
+                            props["_labels"] = record["labels"]
+                            nodes.append(props)
+                    return nodes
+
             return Neo4jAdapter(
                 config.neo4j.uri, config.neo4j.user, config.neo4j.password
             )

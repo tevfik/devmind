@@ -16,7 +16,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
 from config.config import get_config
 from tools.forge.tool import ForgeTool
-from agents.agent_task_manager import social_developer_node, YaverState
+from agents.task_manager import social_developer_node
+from agents.agent_base import YaverState
 
 # Configure Logging
 logging.basicConfig(
@@ -168,7 +169,7 @@ def main():
     }
 
     # We need to make sure agent_task_manager imports are correct for running here
-    from agents.agent_task_manager import task_manager_node
+    from agents.task_manager import task_manager_node
 
     # Run Task Manager Loop
     logger.info("⚡ Starting Agent Loop...")
